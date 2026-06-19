@@ -3,752 +3,478 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Salem DBS — Découverte Biblique et Spirituelle</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✝</text></svg>"/>
-
-<!-- React CDN -->
-<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
-
-<!-- Firebase CDN -->
-<script type="module">
-  import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-  import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-  import { getDatabase, ref, set, get, push, onValue } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
-
-  const firebaseConfig = {
-    apiKey: "AIzaSyBjmJHuNe0GjblwBrP1Rakqr9HgZcfgYT8",
-    authDomain: "salem-dbs.firebaseapp.com",
-    databaseURL: "https://salem-dbs-default-rtdb.firebaseio.com",
-    projectId: "salem-dbs",
-    storageBucket: "salem-dbs.firebasestorage.app",
-    messagingSenderId: "1018849656489",
-    appId: "1:1018849656489:web:283f7174c426a7302373b8"
-  };
-
-  const app = initializeApp(firebaseConfig);
-  const auth = getAuth(app);
-  const db = getDatabase(app);
-
-  window._fb = { auth, db, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile, ref, set, get, push, onValue };
-</script>
-
+<title>Salem DBS</title>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Inter:wght@300;400;500;600;700&display=swap');
-
-:root {
-  --bg:       #0E1117;
-  --surface:  #161B26;
-  --card:     #1C2333;
-  --border:   #2A3348;
-  --gold:     #D4A843;
-  --gold-lt:  #F0CF89;
-  --gold-dim: #8A6A20;
-  --text:     #E8E2D5;
-  --muted:    #8A95A8;
-  --blue:     #4A7FA5;
-  --purple:   #7A4A9A;
-  --green:    #4A8A5A;
-  --error:    #A04A3A;
-}
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,700;1,400&family=Inter:wght@400;500;600;700&display=swap');
+:root{--bg:#0E1117;--sur:#161B26;--card:#1C2333;--bord:#2A3348;--gold:#D4A843;--glt:#F0CF89;--gdim:#8A6A20;--txt:#E8E2D5;--mut:#8A95A8}
 *{box-sizing:border-box;margin:0;padding:0}
-html,body,#root{height:100%;font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased}
-::-webkit-scrollbar{width:4px}
-::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
-.serif{font-family:'Cormorant Garamond',serif}
-@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+html,body{height:100%;font-family:'Inter',sans-serif;background:var(--bg);color:var(--txt)}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 @keyframes spin{to{transform:rotate(360deg)}}
-.fade{animation:fadeUp .35s ease}
-.spin{width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
-
-/* Layout */
-.app{display:flex;height:100vh;overflow:hidden}
-.sidebar{width:230px;min-width:230px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;height:100vh;overflow-y:auto}
-.main{flex:1;overflow:auto;background:var(--bg);min-width:0}
-.page{padding:24px 20px;max-width:860px;margin:0 auto}
-
-/* Sidebar */
-.sb-logo{padding:20px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px}
-.sb-cross{width:36px;height:36px;background:linear-gradient(135deg,var(--gold-dim),var(--gold));border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
-.sb-user{padding:14px 18px;border-bottom:1px solid var(--border);background:rgba(212,168,67,.04)}
-.sb-nav{flex:1;padding:10px 8px}
-.sb-section{font-size:10px;font-weight:600;letter-spacing:1.2px;color:#4A5568;padding:10px 10px 5px;text-transform:uppercase}
-.nav-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;font-size:13.5px;color:var(--muted);cursor:pointer;transition:all .15s;margin-bottom:2px;border-left:2px solid transparent;border:none;background:none;width:100%;text-align:left}
-.nav-item:hover{color:var(--text);background:rgba(255,255,255,.04)}
-.nav-item.active{color:var(--gold);background:rgba(212,168,67,.1);border-left:2px solid var(--gold);font-weight:600}
-.nav-icon{font-size:16px;width:20px;text-align:center}
-.sb-foot{padding:10px 8px;border-top:1px solid var(--border)}
-
-/* Mobile header */
-.mob-header{display:none;align-items:center;justify-content:space-between;padding:14px 16px;background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:10}
-@media(max-width:768px){
-  .sidebar{position:fixed;left:-230px;top:0;z-index:100;transition:left .25s}
-  .sidebar.open{left:0;box-shadow:4px 0 20px rgba(0,0,0,.5)}
-  .mob-header{display:flex}
-  .overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99}
-  .overlay.show{display:block}
+.fade{animation:fadeUp .3s ease}
+.spin{display:inline-block;width:18px;height:18px;border:2px solid #333;border-top-color:var(--gold);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle}
+#wrap{display:flex;height:100vh;overflow:hidden}
+#sb{width:230px;min-width:230px;background:var(--sur);border-right:1px solid var(--bord);display:flex;flex-direction:column;height:100vh;overflow-y:auto;z-index:100}
+#main{flex:1;overflow:auto;background:var(--bg);min-width:0}
+#mbar{display:none;align-items:center;justify-content:space-between;padding:13px 16px;background:var(--sur);border-bottom:1px solid var(--bord);position:sticky;top:0;z-index:10}
+#ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99}
+@media(max-width:720px){
+  #sb{position:fixed;left:-230px;top:0;bottom:0;transition:left .25s}
+  #sb.open{left:0;box-shadow:4px 0 20px rgba(0,0,0,.5)}
+  #ov.show{display:block}
+  #mbar{display:flex!important}
 }
-
-/* Cards & UI */
-.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px}
-.card-accent{border-top:3px solid var(--gold)}
-.btn{padding:11px 20px;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:8px;font-family:'Inter',sans-serif}
-.btn-gold{background:linear-gradient(135deg,var(--gold-dim),var(--gold));color:#0E1117}
-.btn-ghost{background:transparent;color:var(--muted);border:1px solid var(--border)}
-.btn-ghost:hover{color:var(--error);border-color:var(--error)}
+.page{padding:20px 16px;max-width:840px;margin:0 auto}
+.sb-logo{padding:16px;border-bottom:1px solid var(--bord);display:flex;align-items:center;gap:10px}
+.cross-box{width:36px;height:36px;background:linear-gradient(135deg,var(--gdim),var(--gold));border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+.sb-usr{padding:12px 16px;border-bottom:1px solid var(--bord);background:rgba(212,168,67,.04)}
+.sb-nav{flex:1;padding:8px}
+.nb{display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;border-radius:8px;font-size:13px;color:var(--mut);cursor:pointer;border:none;background:none;text-align:left;border-left:2px solid transparent;font-family:'Inter',sans-serif;margin-bottom:2px;transition:all .15s}
+.nb:hover{color:var(--txt);background:rgba(255,255,255,.04)}
+.nb.on{color:var(--gold);background:rgba(212,168,67,.1);border-left-color:var(--gold);font-weight:600}
+.sb-ft{padding:8px;border-top:1px solid var(--bord)}
+.card{background:var(--card);border:1px solid var(--bord);border-radius:12px;padding:18px}
+.inp{width:100%;background:var(--sur);border:1.5px solid var(--bord);border-radius:8px;padding:11px 13px;font-size:14px;color:var(--txt);outline:none;font-family:'Inter',sans-serif;transition:border-color .2s}
+.inp:focus{border-color:var(--gold)}
+.lbl{display:block;font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--mut);margin-bottom:6px}
+.btn{padding:11px 18px;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:7px;font-family:'Inter',sans-serif}
+.bg{background:linear-gradient(135deg,var(--gdim),var(--gold));color:#0E1117}
 .btn:disabled{opacity:.5;cursor:not-allowed}
-.input{width:100%;background:var(--surface);border:1.5px solid var(--border);border-radius:8px;padding:12px 14px;font-size:14px;color:var(--text);outline:none;transition:border-color .2s;font-family:'Inter',sans-serif}
-.input:focus{border-color:var(--gold)}
-.label{display:block;font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:7px}
-.error-box{background:rgba(160,74,58,.15);border:1px solid rgba(160,74,58,.35);border-radius:8px;padding:11px 14px;font-size:13px;color:#E88A80;margin-bottom:14px}
-.tag{display:inline-block;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:500}
-
-/* Tabs row */
-.tabs{display:flex;background:var(--surface);border-radius:8px;padding:3px;gap:3px;margin-bottom:20px}
-.tab{flex:1;padding:9px;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;transition:all .2s;background:transparent;color:var(--muted)}
-.tab.active{background:var(--gold);color:#0E1117}
-
-/* Login page */
-.login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#0E1117,#161B26 50%,#1A1530);padding:24px 16px}
-.login-card{width:100%;max-width:400px;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:36px 28px;box-shadow:0 8px 40px rgba(0,0,0,.5)}
-.login-logo{text-align:center;margin-bottom:28px}
-.login-cross{display:inline-flex;width:50px;height:50px;background:linear-gradient(135deg,var(--gold-dim),var(--gold));border-radius:14px;align-items:center;justify-content:center;font-size:24px;margin-bottom:12px;box-shadow:0 4px 16px rgba(212,168,67,.25)}
-
-/* Section pills */
-.pill-row{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:14px}
-.pill{padding:7px 13px;border-radius:20px;font-size:12px;font-weight:500;border:1px solid;cursor:pointer;transition:all .15s}
-
-/* Quote block */
-.quote{background:rgba(212,168,67,.06);border-left:3px solid var(--gold);border-radius:6px;padding:14px 16px;font-family:'Cormorant Garamond',serif;font-size:17px;font-style:italic;color:var(--gold-lt);line-height:1.75}
-
-/* History item */
-.hist-item{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;cursor:pointer;transition:border-color .2s;margin-bottom:8px}
-.hist-item:hover{border-color:var(--gold)}
-
-/* Stats grid */
-.stats-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px}
-.stat-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;border-top:3px solid}
-@media(max-width:480px){.stats-grid{grid-template-columns:1fr 1fr}}
-
-/* Actions grid */
-.actions-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:24px}
-@media(max-width:480px){.actions-grid{grid-template-columns:1fr}}
-.action-btn{display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;cursor:pointer;transition:all .2s;text-align:left;width:100%}
-.action-btn:hover{background:#202838}
-.action-icon{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
-
-/* Section display */
-.section-content{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-top:12px}
-.meta-item label{font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--gold);display:block;margin-bottom:4px}
-.meta-item p{font-size:13px;color:var(--text);line-height:1.5}
-.meta-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px}
-@media(max-width:480px){.meta-grid{grid-template-columns:1fr}}
-.sub-section{margin-bottom:14px}
-.sub-label{font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--gold);margin-bottom:6px}
-.body-text{font-size:14px;line-height:1.8;color:#C8C0B0}
+.err-box{background:rgba(160,74,58,.15);border:1px solid rgba(160,74,58,.35);border-radius:8px;padding:10px 13px;font-size:13px;color:#E88A80}
+.tabs{display:flex;background:var(--sur);border-radius:8px;padding:3px;gap:3px;margin-bottom:16px}
+.tab{flex:1;padding:9px;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;background:transparent;color:var(--mut);font-family:'Inter',sans-serif}
+.tab.on{background:var(--gold);color:#0E1117}
+.sr{font-family:'Cormorant Garamond',serif}
+.h1{font-family:'Cormorant Garamond',serif;font-size:25px;font-weight:700;color:var(--glt);margin-bottom:4px}
+.mu{color:var(--mut);font-size:13px}
+.pill{display:inline-block;padding:5px 11px;border-radius:20px;font-size:12px;font-weight:500;border:1px solid;cursor:pointer;font-family:'Inter',sans-serif}
+.qt{background:rgba(212,168,67,.06);border-left:3px solid var(--gold);border-radius:6px;padding:12px 14px;font-family:'Cormorant Garamond',serif;font-size:17px;font-style:italic;color:var(--glt);line-height:1.75}
+.bt{font-size:14px;line-height:1.8;color:#C8C0B0}
+.hi{background:var(--card);border:1px solid var(--bord);border-radius:10px;padding:13px 15px;cursor:pointer;margin-bottom:8px;transition:border-color .2s}
+.hi:hover,.hi.ex{border-color:var(--gold)}
+.sc{background:var(--card);border:1px solid var(--bord);border-radius:12px;padding:15px;border-top:3px solid}
+.lw{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#0E1117,#161B26 50%,#1A1530);padding:20px 16px}
+.lc{width:100%;max-width:380px;background:var(--card);border:1px solid var(--bord);border-radius:16px;padding:30px 24px}
 </style>
 </head>
 <body>
-<div id="root"></div>
 
-<script type="text/babel">
-const { useState, useEffect, useCallback } = React;
+<!-- Layout principal — toujours présent dans le DOM -->
+<div id="wrap" style="display:none">
+  <aside id="sb">
+    <div class="sb-logo">
+      <div class="cross-box">✝</div>
+      <div>
+        <div class="sr" style="font-size:18px;font-weight:700;color:var(--glt)">Salem DBS</div>
+        <div style="font-size:10px;color:var(--mut);letter-spacing:1px">DÉCOUVERTE BIBLIQUE</div>
+      </div>
+    </div>
+    <div class="sb-usr" id="sb-usr"></div>
+    <nav class="sb-nav" id="sb-nav"></nav>
+    <div class="sb-ft">
+      <button class="nb" onclick="logout()" style="width:100%"><span>🚪</span>Déconnexion</button>
+    </div>
+  </aside>
+  <div id="ov" onclick="closeSB()"></div>
+  <div id="main">
+    <div id="mbar">
+      <div class="sr" style="font-size:18px;font-weight:700;color:var(--glt)">✝ Salem DBS</div>
+      <button onclick="openSB()" style="background:none;border:none;color:var(--txt);font-size:22px;cursor:pointer">☰</button>
+    </div>
+    <div id="pc"></div>
+  </div>
+</div>
 
-// ── Wait for Firebase ──
-function waitFB() {
-  return new Promise(res => {
-    const t = setInterval(() => { if(window._fb){ clearInterval(t); res(window._fb) } }, 50)
-  })
+<!-- Login — affiché par défaut -->
+<div id="login-wrap" class="lw">
+  <div class="lc">
+    <div style="text-align:center;margin-bottom:22px">
+      <div style="display:inline-flex;width:48px;height:48px;background:linear-gradient(135deg,var(--gdim),var(--gold));border-radius:13px;align-items:center;justify-content:center;font-size:22px;margin-bottom:10px">✝</div>
+      <div class="sr" style="font-size:25px;font-weight:700;color:var(--glt)">Salem DBS</div>
+      <div style="font-size:11px;color:var(--mut);letter-spacing:1.5px;text-transform:uppercase;margin-top:3px">Découverte Biblique & Spirituelle</div>
+    </div>
+    <div class="tabs">
+      <button class="tab on" id="tl" onclick="stab('l')">Connexion</button>
+      <button class="tab" id="tr" onclick="stab('r')">Inscription</button>
+    </div>
+    <div id="aerr"></div>
+    <div id="rfields" style="display:none">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+        <div><label class="lbl">Prénom</label><input class="inp" id="ifn" placeholder="Jean"/></div>
+        <div><label class="lbl">Nom</label><input class="inp" id="iln" placeholder="Pierre"/></div>
+      </div>
+    </div>
+    <div style="margin-bottom:12px"><label class="lbl">Email</label><input class="inp" id="iem" type="email" placeholder="nom@email.com" onkeydown="if(event.key==='Enter')doAuth()"/></div>
+    <div style="margin-bottom:12px"><label class="lbl">Mot de passe</label><input class="inp" id="ipw" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')doAuth()"/></div>
+    <div id="cpwf" style="display:none;margin-bottom:12px"><label class="lbl">Confirmer</label><input class="inp" id="icpw" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')doAuth()"/></div>
+    <button class="btn bg" id="abtn" onclick="doAuth()" style="width:100%;justify-content:center;padding:12px">→ Se connecter</button>
+    <div style="text-align:center;margin-top:14px;font-family:'Cormorant Garamond',serif;font-style:italic;font-size:14px;color:var(--gold);opacity:.8">"Ta parole est une lampe à mes pieds" — Ps 119:105</div>
+  </div>
+</div>
+
+<script>
+// ─── FIREBASE REST API ─────────────────────
+const API_KEY  = 'AIzaSyBjmJHuNe0GjblwBrP1Rakqr9HgZcfgYT8';
+const DB_URL   = 'https://salem-dbs-default-rtdb.firebaseio.com';
+const AUTH_URL = 'https://identitytoolkit.googleapis.com/v1/accounts';
+
+let _tok=null, _uid=null;
+
+async function fbSignIn(email,pw){
+  const r=await fetch(`${AUTH_URL}:signInWithPassword?key=${API_KEY}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password:pw,returnSecureToken:true})});
+  const d=await r.json();
+  if(!r.ok) throw d.error?.message||'ERREUR';
+  _tok=d.idToken; _uid=d.localId;
+  try{localStorage.setItem('sdbs',JSON.stringify({t:_tok,u:_uid,exp:Date.now()+3500000}));}catch(e){}
+  return d;
 }
 
-// ══════════════════════════════════════════
-// NAV CONFIG
-// ══════════════════════════════════════════
-const NAV = [
-  { id:'dashboard',  icon:'⊞', label:'Tableau de bord' },
-  { id:'etudes',     icon:'📖', label:'Études Bibliques' },
-  { id:'pastoral',   icon:'🎙', label:'Module Pastoral' },
-  { id:'formation',  icon:'🎓', label:'Formation' },
-  { id:'historique', icon:'🕐', label:'Historique' },
-  { id:'profil',     icon:'👤', label:'Mon Profil' },
-]
-const ADMIN_NAV = [
-  { id:'eglises', icon:'⛪', label:'Églises' },
-  { id:'membres', icon:'👥', label:'Membres' },
-]
+async function fbSignUp(email,pw){
+  const r=await fetch(`${AUTH_URL}:signUp?key=${API_KEY}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password:pw,returnSecureToken:true})});
+  const d=await r.json();
+  if(!r.ok) throw d.error?.message||'ERREUR';
+  _tok=d.idToken; _uid=d.localId;
+  try{localStorage.setItem('sdbs',JSON.stringify({t:_tok,u:_uid,exp:Date.now()+3500000}));}catch(e){}
+  return d;
+}
 
-const SECTIONS = [
-  { key:'texte',              label:'Texte biblique',        icon:'📜', color:'#D4A843' },
-  { key:'contexteHistorique', label:'Contexte historique',   icon:'🏛', color:'#4A7FA5' },
-  { key:'contexteLitteraire', label:'Contexte littéraire',   icon:'📚', color:'#7A4A9A' },
-  { key:'analyseExegetique',  label:'Analyse exégétique',    icon:'🔍', color:'#4A8A5A' },
-  { key:'analyseHermeneutique',label:'Analyse herméneutique',icon:'🔑', color:'#A07A3A' },
-  { key:'analyseTheologique', label:'Analyse théologique',   icon:'✝', color:'#D4A843' },
-  { key:'analysePentecotiste',label:'Analyse pentecôtiste',  icon:'🔥', color:'#A04A3A' },
-  { key:'applicationPratique',label:'Application pratique',  icon:'🌱', color:'#4A8A5A' },
-  { key:'referencesCroisees', label:'Références croisées',   icon:'🔗', color:'#4A7FA5' },
-  { key:'questionsReflexion', label:'Questions de réflexion',icon:'💭', color:'#7A4A9A' },
-  { key:'planEnseignement',   label:"Plan d'enseignement",   icon:'📋', color:'#8A6A20' },
-]
+function fbOut(){
+  _tok=null;_uid=null;
+  try{localStorage.removeItem('sdbs');}catch(e){}
+}
 
-// ══════════════════════════════════════════
-// LOGIN PAGE
-// ══════════════════════════════════════════
-function LoginPage({ onLogin }) {
-  const [tab, setTab] = useState('login')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [form, setForm] = useState({ firstName:'', lastName:'', email:'', password:'', confirm:'' })
-  const upd = k => e => setForm(f => ({...f, [k]: e.target.value}))
+function restoreSession(){
+  try{
+    const s=JSON.parse(localStorage.getItem('sdbs')||'null');
+    if(s&&Date.now()<s.exp){_tok=s.t;_uid=s.u;return true;}
+  }catch(e){}
+  return false;
+}
 
-  async function submit() {
-    setError(''); setLoading(true)
-    const fb = await waitFB()
-    try {
-      if(tab === 'login') {
-        const c = await fb.signInWithEmailAndPassword(fb.auth, form.email, form.password)
-        const snap = await fb.get(fb.ref(fb.db, `users/${c.user.uid}`))
-        onLogin(c.user, snap.exists() ? snap.val() : null)
-      } else {
-        if(!form.firstName||!form.lastName) throw {message:'Entrez nom et prénom'}
-        if(form.password !== form.confirm) throw {message:'Mots de passe différents'}
-        if(form.password.length < 6) throw {message:'Minimum 6 caractères'}
-        const c = await fb.createUserWithEmailAndPassword(fb.auth, form.email, form.password)
-        await fb.updateProfile(c.user, { displayName:`${form.firstName} ${form.lastName}` })
-        const userData = { uid:c.user.uid, firstName:form.firstName, lastName:form.lastName, email:form.email, role:'USER', createdAt:new Date().toISOString() }
-        await fb.set(fb.ref(fb.db, `users/${c.user.uid}`), userData)
-        onLogin(c.user, userData)
-      }
-    } catch(e) {
-      const msgs = { 'auth/user-not-found':'Compte introuvable','auth/wrong-password':'Mot de passe incorrect','auth/email-already-in-use':'Email déjà utilisé','auth/invalid-credential':'Email ou mot de passe incorrect' }
-      setError(msgs[e.code] || e.message)
-    } finally { setLoading(false) }
+async function dbGet(path){
+  const r=await fetch(`${DB_URL}/${path}.json?auth=${_tok}`);
+  return await r.json();
+}
+async function dbSet(path,data){
+  await fetch(`${DB_URL}/${path}.json?auth=${_tok}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+}
+async function dbPush(path,data){
+  const r=await fetch(`${DB_URL}/${path}.json?auth=${_tok}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+  return await r.json();
+}
+
+// ─── STATE ────────────────────────────────
+let profile=null, page='dashboard';
+let studies=[], histAll=[], histExp=null;
+let etudeRes=null, activeSec='texte';
+
+// ─── UTILS ────────────────────────────────
+const $=id=>document.getElementById(id);
+const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+function fade(el){el.classList.remove('fade');void el.offsetWidth;el.classList.add('fade')}
+
+// ─── SIDEBAR ──────────────────────────────
+window.openSB=()=>{$('sb').classList.add('open');$('ov').classList.add('show')};
+window.closeSB=()=>{$('sb').classList.remove('open');$('ov').classList.remove('show')};
+
+const NAV=[
+  {id:'dashboard',ic:'⊞',lb:'Tableau de bord'},
+  {id:'etudes',ic:'📖',lb:'Études Bibliques'},
+  {id:'pastoral',ic:'🎙',lb:'Module Pastoral'},
+  {id:'formation',ic:'🎓',lb:'Formation'},
+  {id:'historique',ic:'🕐',lb:'Historique'},
+  {id:'profil',ic:'👤',lb:'Mon Profil'},
+];
+
+function rSB(){
+  const rm={SUPER_ADMIN:'⭐ Super Admin',CHURCH_ADMIN:'🏛 Admin',PASTOR:'✝ Pasteur',USER:'📖 Croyant'};
+  $('sb-usr').innerHTML=`<div style="font-size:13px;font-weight:600;color:var(--txt)">${esc(profile?.firstName)} ${esc(profile?.lastName)}</div><div style="font-size:11px;color:var(--gold);margin-top:2px">${rm[profile?.role]||'📖 Croyant'}</div>`;
+  $('sb-nav').innerHTML=NAV.map(n=>`<button class="nb${page===n.id?' on':''}" onclick="gp('${n.id}')"><span style="width:20px;text-align:center">${n.ic}</span>${n.lb}</button>`).join('');
+}
+
+window.gp=function(id){page=id;rSB();closeSB();rPage()};
+
+// ─── LOGIN / AUTH ─────────────────────────
+function showLogin(){
+  $('wrap').style.display='none';
+  $('login-wrap').style.display='flex';
+}
+
+function showApp(){
+  $('login-wrap').style.display='none';
+  $('wrap').style.display='flex';
+}
+
+window.stab=function(t){
+  window._lt=t;
+  $('tl').classList.toggle('on',t==='l');
+  $('tr').classList.toggle('on',t==='r');
+  $('rfields').style.display=t==='r'?'block':'none';
+  $('cpwf').style.display=t==='r'?'block':'none';
+  $('abtn').textContent=t==='l'?'→ Se connecter':'→ Créer mon compte';
+  $('aerr').innerHTML='';
+};
+window._lt='l';
+
+window.doAuth=async function(){
+  const btn=$('abtn'),errEl=$('aerr');
+  errEl.innerHTML='';btn.disabled=true;
+  btn.innerHTML='<div class="spin"></div> Patientez...';
+  try{
+    const em=($('iem').value||'').trim(),pw=$('ipw').value||'';
+    if(!em||!pw) throw 'Remplissez tous les champs';
+    if(window._lt==='l'){
+      await fbSignIn(em,pw);
+      await loadProfil();
+    } else {
+      const fn=($('ifn').value||'').trim(),ln=($('iln').value||'').trim(),cpw=$('icpw').value||'';
+      if(!fn||!ln) throw 'Entrez votre prénom et nom';
+      if(pw!==cpw) throw 'Les mots de passe sont différents';
+      if(pw.length<6) throw 'Minimum 6 caractères';
+      await fbSignUp(em,pw);
+      const ud={uid:_uid,firstName:fn,lastName:ln,email:em,role:'USER',createdAt:new Date().toISOString()};
+      await dbSet(`users/${_uid}`,ud);
+      profile=ud;
+      enterApp();
+    }
+  }catch(e){
+    const msgs={
+      'EMAIL_NOT_FOUND':'Compte introuvable',
+      'INVALID_PASSWORD':'Mot de passe incorrect',
+      'INVALID_LOGIN_CREDENTIALS':'Email ou mot de passe incorrect',
+      'EMAIL_EXISTS':'Email déjà utilisé',
+      'WEAK_PASSWORD : Password should be at least 6 characters':'Minimum 6 caractères',
+    };
+    const msg=typeof e==='string'?e:(msgs[e]||e);
+    errEl.innerHTML=`<div class="err-box" style="margin-bottom:12px">⚠ ${esc(msg)}</div>`;
+    btn.disabled=false;
+    btn.textContent=window._lt==='l'?'→ Se connecter':'→ Créer mon compte';
   }
+};
 
-  return (
-    <div className="login-wrap fade">
-      <div className="login-card">
-        <div className="login-logo">
-          <div className="login-cross">✝</div>
-          <div className="serif" style={{fontSize:26,fontWeight:700,color:'var(--gold-lt)'}}>Salem DBS</div>
-          <div style={{fontSize:11,color:'var(--muted)',letterSpacing:'1.5px',textTransform:'uppercase',marginTop:4}}>Découverte Biblique & Spirituelle</div>
-        </div>
-
-        <div className="tabs">
-          <button className={`tab${tab==='login'?' active':''}`} onClick={()=>{setTab('login');setError('')}}>Connexion</button>
-          <button className={`tab${tab==='register'?' active':''}`} onClick={()=>{setTab('register');setError('')}}>Inscription</button>
-        </div>
-
-        {error && <div className="error-box">⚠ {error}</div>}
-
-        {tab==='register' && (
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:14}}>
-            <div><label className="label">Prénom</label><input className="input" placeholder="Jean" value={form.firstName} onChange={upd('firstName')} onKeyDown={e=>e.key==='Enter'&&submit()}/></div>
-            <div><label className="label">Nom</label><input className="input" placeholder="Pierre" value={form.lastName} onChange={upd('lastName')} onKeyDown={e=>e.key==='Enter'&&submit()}/></div>
-          </div>
-        )}
-
-        <div style={{marginBottom:14}}>
-          <label className="label">Email</label>
-          <input className="input" type="email" placeholder="nom@email.com" value={form.email} onChange={upd('email')} onKeyDown={e=>e.key==='Enter'&&submit()}/>
-        </div>
-        <div style={{marginBottom:tab==='register'?14:20}}>
-          <label className="label">Mot de passe</label>
-          <input className="input" type="password" placeholder="••••••••" value={form.password} onChange={upd('password')} onKeyDown={e=>e.key==='Enter'&&submit()}/>
-        </div>
-        {tab==='register' && (
-          <div style={{marginBottom:20}}>
-            <label className="label">Confirmer</label>
-            <input className="input" type="password" placeholder="••••••••" value={form.confirm} onChange={upd('confirm')} onKeyDown={e=>e.key==='Enter'&&submit()}/>
-          </div>
-        )}
-
-        <button className="btn btn-gold" style={{width:'100%',justifyContent:'center',padding:13}} onClick={submit} disabled={loading}>
-          {loading ? <><div className="spin"/>Patientez...</> : (tab==='login' ? '→ Se connecter' : '→ Créer mon compte')}
-        </button>
-
-        <div style={{textAlign:'center',marginTop:18,fontFamily:'Cormorant Garamond, serif',fontStyle:'italic',fontSize:14,color:'var(--gold)',opacity:.8}}>
-          "Ta parole est une lampe à mes pieds" — Ps 119:105
-        </div>
-      </div>
-    </div>
-  )
+async function loadProfil(){
+  try{const d=await dbGet(`users/${_uid}`);profile=d||{uid:_uid,firstName:'Utilisateur',lastName:'',role:'USER'};}
+  catch(e){profile={uid:_uid,firstName:'Utilisateur',lastName:'',role:'USER'};}
+  enterApp();
 }
 
-// ══════════════════════════════════════════
-// SIDEBAR
-// ══════════════════════════════════════════
-function Sidebar({ page, setPage, profile, onLogout, open, onClose }) {
-  const isAdmin = profile?.role === 'SUPER_ADMIN' || profile?.role === 'CHURCH_ADMIN'
-  const roleLabel = { SUPER_ADMIN:'⭐ Super Admin', CHURCH_ADMIN:'🏛 Admin Église', PASTOR:'✝ Pasteur', USER:'📖 Croyant' }
-
-  function nav(id) { setPage(id); onClose() }
-
-  return (
-    <>
-      {open && <div className="overlay show" onClick={onClose}/>}
-      <aside className={`sidebar${open?' open':''}`}>
-        <div className="sb-logo">
-          <div className="sb-cross">✝</div>
-          <div>
-            <div className="serif" style={{fontSize:18,fontWeight:700,color:'var(--gold-lt)'}}>Salem DBS</div>
-            <div style={{fontSize:10,color:'var(--muted)',letterSpacing:'1px'}}>DÉCOUVERTE BIBLIQUE</div>
-          </div>
-        </div>
-
-        <div className="sb-user">
-          <div style={{fontSize:13,fontWeight:600,color:'var(--text)'}}>{profile?.firstName} {profile?.lastName}</div>
-          <div style={{fontSize:11,color:'var(--gold)',marginTop:3}}>{roleLabel[profile?.role]||'📖 Croyant'}</div>
-        </div>
-
-        <nav className="sb-nav">
-          <div className="sb-section">Navigation</div>
-          {NAV.map(n=>(
-            <button key={n.id} className={`nav-item${page===n.id?' active':''}`} onClick={()=>nav(n.id)}>
-              <span className="nav-icon">{n.icon}</span>{n.label}
-            </button>
-          ))}
-          {isAdmin && <>
-            <div className="sb-section" style={{marginTop:8}}>Administration</div>
-            {ADMIN_NAV.map(n=>(
-              <button key={n.id} className={`nav-item${page===n.id?' active':''}`} onClick={()=>nav(n.id)}>
-                <span className="nav-icon">{n.icon}</span>{n.label}
-              </button>
-            ))}
-          </>}
-        </nav>
-
-        <div className="sb-foot">
-          <button className="nav-item btn-ghost" style={{width:'100%',border:'none'}} onClick={onLogout}>
-            <span className="nav-icon">🚪</span>Déconnexion
-          </button>
-        </div>
-      </aside>
-    </>
-  )
+function enterApp(){
+  showApp();
+  page='dashboard';
+  rSB();
+  rPage();
 }
 
-// ══════════════════════════════════════════
-// DASHBOARD
-// ══════════════════════════════════════════
-function Dashboard({ profile, setPage }) {
-  const [studies, setStudies] = useState([])
+window.logout=function(){
+  fbOut();profile=null;studies=[];histAll=[];etudeRes=null;
+  showLogin();
+};
 
-  useEffect(()=>{
-    if(!profile?.uid) return
-    waitFB().then(fb=>{
-      fb.get(fb.ref(fb.db, `studies/${profile.uid}`)).then(snap=>{
-        if(snap.exists()) {
-          const all = Object.values(snap.val()).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt))
-          setStudies(all)
-        }
-      }).catch(()=>{})
-    })
-  },[profile])
-
-  const hour = new Date().getHours()
-  const greet = hour<12?'Bonjour':hour<18?'Bon après-midi':'Bonsoir'
-
-  const ACTIONS = [
-    {icon:'📖',label:'Nouvelle étude',desc:'Analyser un passage',color:'#D4A843',page:'etudes'},
-    {icon:'🎙',label:'Générer un sermon',desc:'Module pastoral',color:'#7A4A9A',page:'pastoral'},
-    {icon:'🎓',label:'Formation',desc:'Parcours disciples',color:'#4A7FA5',page:'formation'},
-    {icon:'🕐',label:'Historique',desc:'Études passées',color:'#4A8A5A',page:'historique'},
-  ]
-
-  return (
-    <div className="page fade">
-      <div style={{marginBottom:24}}>
-        <h1 className="serif" style={{fontSize:28,fontWeight:700,color:'var(--gold-lt)',marginBottom:4}}>{greet}, {profile?.firstName} 👋</h1>
-        <p style={{fontSize:13,color:'var(--muted)'}}>Que la Parole de Dieu éclaire votre journée</p>
-      </div>
-
-      <div className="stats-grid">
-        {[
-          {label:'Études réalisées',value:studies.length,icon:'📖',color:'#D4A843'},
-          {label:'Cette semaine',value:studies.filter(s=>new Date(s.createdAt)>new Date(Date.now()-7*86400000)).length,icon:'📅',color:'#4A7FA5'},
-          {label:'Rôle',value:profile?.role==='PASTOR'?'Pasteur':profile?.role==='SUPER_ADMIN'?'Admin':'Croyant',icon:'✝',color:'#7A4A9A'},
-        ].map((s,i)=>(
-          <div key={i} className="stat-card" style={{borderTopColor:s.color}}>
-            <div style={{fontSize:20,marginBottom:6}}>{s.icon}</div>
-            <div className="serif" style={{fontSize:24,fontWeight:700,color:s.color}}>{s.value}</div>
-            <div style={{fontSize:11,color:'var(--muted)',marginTop:2}}>{s.label}</div>
-          </div>
-        ))}
-      </div>
-
-      <div style={{marginBottom:6,fontSize:11,fontWeight:600,letterSpacing:'1.2px',textTransform:'uppercase',color:'var(--muted)'}}>Actions rapides</div>
-      <div className="actions-grid">
-        {ACTIONS.map((a,i)=>(
-          <button key={i} className="action-btn" onClick={()=>setPage(a.page)} onMouseEnter={e=>e.currentTarget.style.borderColor=a.color} onMouseLeave={e=>e.currentTarget.style.borderColor='var(--border)'}>
-            <div className="action-icon" style={{background:`${a.color}22`}}>{a.icon}</div>
-            <div>
-              <div style={{fontSize:13,fontWeight:600,color:'var(--text)',marginBottom:2}}>{a.label}</div>
-              <div style={{fontSize:11,color:'var(--muted)'}}>{a.desc}</div>
-            </div>
-          </button>
-        ))}
-      </div>
-
-      <div style={{marginBottom:10,fontSize:11,fontWeight:600,letterSpacing:'1.2px',textTransform:'uppercase',color:'var(--muted)'}}>Études récentes</div>
-      {studies.length===0 ? (
-        <div className="card" style={{textAlign:'center',padding:'32px 20px',color:'var(--muted)'}}>
-          <div style={{fontSize:32,marginBottom:10}}>📖</div>
-          <div style={{marginBottom:4}}>Aucune étude réalisée</div>
-          <button className="btn btn-gold" style={{marginTop:12}} onClick={()=>setPage('etudes')}>→ Commencer une étude</button>
-        </div>
-      ) : (
-        studies.slice(0,4).map((s,i)=>(
-          <div key={i} className="hist-item" onClick={()=>setPage('historique')}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12}}>
-              <div>
-                <div className="serif" style={{fontSize:17,fontWeight:700,color:'var(--gold-lt)'}}> ✝ {s.reference}</div>
-                <div style={{fontSize:12,color:'var(--muted)',marginTop:2}}>{(s.ideeGenerale||'').slice(0,80)}…</div>
-              </div>
-              <div style={{fontSize:11,color:'#4A5568',whiteSpace:'nowrap'}}>{new Date(s.createdAt).toLocaleDateString('fr-FR',{day:'2-digit',month:'short'})}</div>
-            </div>
-          </div>
-        ))
-      )}
-
-      <div style={{marginTop:20,background:'rgba(212,168,67,.06)',border:'1px solid rgba(212,168,67,.2)',borderLeft:'3px solid var(--gold)',borderRadius:12,padding:18}}>
-        <div style={{fontSize:10,fontWeight:600,letterSpacing:'1.2px',textTransform:'uppercase',color:'var(--gold)',marginBottom:8}}>✝ Verset du jour</div>
-        <div className="serif" style={{fontSize:17,fontStyle:'italic',color:'var(--text)',lineHeight:1.75,marginBottom:8}}>
-          "Car je connais les projets que j'ai formés sur vous, dit l'Éternel, projets de paix et non de malheur, afin de vous donner un avenir et de l'espérance."
-        </div>
-        <div style={{fontSize:12,color:'var(--muted)'}}>Jérémie 29:11</div>
-      </div>
-    </div>
-  )
+// ─── ROUTER ───────────────────────────────
+function rPage(){
+  const el=$('pc');if(!el)return;
+  const fn={
+    dashboard:pgDash,etudes:pgEtudes,historique:pgHist,
+    pastoral:()=>pgCS('🎙','Module Pastoral','Génération de sermons et plans évangélisation','#7A4A9A'),
+    formation:()=>pgCS('🎓','Formation','Parcours disciples','#4A7FA5'),
+    profil:()=>pgCS('👤','Mon Profil','Données personnelles et ecclésiastiques','#4A8A5A'),
+    eglises:()=>pgCS('⛪','Gestion des Églises','Administration des congrégations','#D4A843'),
+    membres:()=>pgCS('👥','Gestion des Membres','Registre complet','#A07A3A'),
+  };
+  el.innerHTML=(fn[page]||pgDash)();
+  fade(el);
+  if(page==='dashboard')initDash();
+  if(page==='etudes')initEtudes();
+  if(page==='historique')initHist();
 }
 
-// ══════════════════════════════════════════
-// ÉTUDES BIBLIQUES
-// ══════════════════════════════════════════
-function Etudes({ profile }) {
-  const [ref2, setRef2] = useState('')
-  const [langue, setLangue] = useState('fr')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [result, setResult] = useState(null)
-  const [activeSection, setActiveSection] = useState(null)
+// ─── DASHBOARD ────────────────────────────
+function pgDash(){
+  const h=new Date().getHours();
+  const gr=h<12?'Bonjour':h<18?'Bon après-midi':'Bonsoir';
+  return `<div class="page fade">
+<div style="margin-bottom:18px"><div class="h1">${gr}, ${esc(profile?.firstName)} 👋</div><div class="mu">Que la Parole de Dieu éclaire votre journée</div></div>
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:18px">
+  <div class="sc" style="border-top-color:#D4A843"><div style="font-size:20px;margin-bottom:4px">📖</div><div class="sr" style="font-size:22px;font-weight:700;color:#D4A843" id="s1">—</div><div style="font-size:11px;color:var(--mut)">Études</div></div>
+  <div class="sc" style="border-top-color:#4A7FA5"><div style="font-size:20px;margin-bottom:4px">📅</div><div class="sr" style="font-size:22px;font-weight:700;color:#4A7FA5" id="s2">—</div><div style="font-size:11px;color:var(--mut)">Semaine</div></div>
+  <div class="sc" style="border-top-color:#7A4A9A"><div style="font-size:20px;margin-bottom:4px">✝</div><div class="sr" style="font-size:13px;font-weight:700;color:#7A4A9A;margin-top:4px">${profile?.role==='PASTOR'?'Pasteur':profile?.role==='SUPER_ADMIN'?'Admin':'Croyant'}</div><div style="font-size:11px;color:var(--mut);margin-top:3px">Rôle</div></div>
+</div>
+<div class="mu" style="font-size:10px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;margin-bottom:9px">Actions rapides</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:18px">
+  ${[['📖','Nouvelle étude','etudes','#D4A843'],['🎙','Sermon','pastoral','#7A4A9A'],['🎓','Formation','formation','#4A7FA5'],['🕐','Historique','historique','#4A8A5A']].map(([ic,lb,pg,co])=>`
+  <button onclick="gp('${pg}')" style="display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--bord);border-radius:10px;padding:12px;cursor:pointer;text-align:left;width:100%" onmouseover="this.style.borderColor='${co}'" onmouseout="this.style.borderColor='var(--bord)'">
+    <div style="width:36px;height:36px;border-radius:8px;background:${co}22;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">${ic}</div>
+    <div style="font-size:13px;font-weight:600;color:var(--txt)">${lb}</div>
+  </button>`).join('')}
+</div>
+<div class="mu" style="font-size:10px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;margin-bottom:9px">Études récentes</div>
+<div id="rl"><div class="mu">Chargement…</div></div>
+<div style="margin-top:16px;background:rgba(212,168,67,.06);border-left:3px solid var(--gold);border-radius:10px;padding:14px">
+  <div style="font-size:10px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--gold);margin-bottom:7px">✝ Verset du jour</div>
+  <div class="sr" style="font-size:16px;font-style:italic;color:var(--txt);line-height:1.75;margin-bottom:6px">"Car je connais les projets que j'ai formés sur vous, dit l'Éternel, projets de paix et non de malheur, afin de vous donner un avenir et de l'espérance."</div>
+  <div style="font-size:12px;color:var(--mut)">Jérémie 29:11</div>
+</div>
+</div>`;
+}
 
-  async function analyser() {
-    if(!ref2.trim()){setError('Entrez une référence biblique');return}
-    setError('');setLoading(true);setResult(null);setActiveSection(null)
-    const langLabel = langue==='fr'?'français':'créole haïtien'
-
-    const prompt = `Tu es un théologien pentecôtiste évangélique expert en exégèse et herméneutique biblique.
-Analyse le passage biblique : "${ref2}"
-Réponds en ${langLabel}, uniquement en JSON valide sans markdown ni balise.
-Structure JSON :
-{
-  "reference":"référence normalisée",
-  "texte":"texte complet (Louis Segond ou NEG)",
-  "auteur":"auteur du livre",
-  "dateRedaction":"période de rédaction",
-  "destinataires":"destinataires originaux",
-  "ideeGenerale":"message central en une phrase",
-  "contexteHistorique":"contexte historique et culturel détaillé",
-  "contexteLitteraire":"genre littéraire, structure, place du passage",
-  "analyseExegetique":{"structure":"structure du passage","motsCles":["mot1","mot2","mot3"],"sensOriginal":"sens dans la langue originale","intentionAuteur":"intention de l'auteur"},
-  "analyseHermeneutique":"principes d'interprétation et application",
-  "analyseTheologique":{"dieu":"ce que révèle Dieu","christ":"liens christologiques","salut":"aspects sotériologiques","saintEsprit":"rôle du Saint-Esprit","eglise":"implications ecclésiologiques"},
-  "analysePentecotiste":{"baptemeSaintEsprit":"enseignements","donsSpirituels":"dons mentionnés","sanctification":"vie sainte","revival":"lien avec le réveil","mission":"implications missionnaires"},
-  "applicationPratique":{"viePersonnelle":"application personnelle","vieFamiliale":"application familiale","vieMinisterielle":"application ministérielle","vieMissionnaire":"application missionnaire"},
-  "referencesCroisees":["Réf1 — description","Réf2 — description","Réf3 — description"],
-  "questionsReflexion":["Question 1?","Question 2?","Question 3?"],
-  "planEnseignement":{"titre":"titre du message","introduction":"introduction engageante","points":["Point 1","Point 2","Point 3"],"conclusion":"conclusion et appel"}
-}`
-
-    try {
-      const resp = await fetch('https://api.anthropic.com/v1/messages',{
-        method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1000,messages:[{role:'user',content:prompt}]})
-      })
-      if(!resp.ok) throw new Error(`Erreur API ${resp.status}`)
-      const data = await resp.json()
-      const raw = data.content.map(c=>c.text||'').join('')
-      let parsed
-      try { parsed = JSON.parse(raw.replace(/```json|```/g,'').trim()) }
-      catch(e) { throw new Error('Réponse invalide, réessayez') }
-
-      const study = {...parsed, langue, createdAt:new Date().toISOString()}
-      setResult(study)
-      setActiveSection('texte')
-
-      if(profile?.uid) {
-        const fb = await waitFB()
-        await fb.push(fb.ref(fb.db, `studies/${profile.uid}`), study)
-      }
-    } catch(e) { setError(e.message||'Erreur de connexion') }
-    finally { setLoading(false) }
+async function initDash(){
+  try{const d=await dbGet(`studies/${_uid}`);studies=d&&typeof d==='object'?Object.values(d).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)):[];}catch(e){studies=[];}
+  const s1=$('s1'),s2=$('s2'),rl=$('rl');if(!s1)return;
+  const wk=studies.filter(s=>new Date(s.createdAt)>new Date(Date.now()-7*86400000)).length;
+  s1.textContent=studies.length;s2.textContent=wk;
+  if(!studies.length){
+    rl.innerHTML=`<div class="card" style="text-align:center;padding:24px"><div style="font-size:28px;margin-bottom:9px">📖</div><div class="mu" style="margin-bottom:11px">Aucune étude réalisée</div><button class="btn bg" onclick="gp('etudes')">→ Commencer</button></div>`;
+  }else{
+    rl.innerHTML=studies.slice(0,4).map(s=>`<div class="hi" onclick="gp('historique')"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><div><div class="sr" style="font-size:16px;font-weight:700;color:var(--glt)">✝ ${esc(s.reference)}</div><div style="font-size:12px;color:var(--mut);margin-top:2px">${esc((s.ideeGenerale||'').slice(0,80))}…</div></div><div style="font-size:11px;color:#4A5568;white-space:nowrap">${new Date(s.createdAt).toLocaleDateString('fr-FR',{day:'2-digit',month:'short'})}</div></div></div>`).join('');
   }
-
-  function renderVal(key, val) {
-    if(!val) return <div style={{color:'var(--muted)',fontStyle:'italic'}}>Non disponible</div>
-    if(typeof val==='string') return <div className="body-text">{val}</div>
-    if(Array.isArray(val)) return (
-      <div style={{display:'flex',flexDirection:'column',gap:8}}>
-        {val.map((item,i)=>(
-          <div key={i} style={{padding:'10px 14px',background:'rgba(255,255,255,.03)',borderRadius:6,borderLeft:'2px solid var(--gold)',fontSize:14,color:'#C8C0B0',lineHeight:1.6}}>
-            {key==='questionsReflexion'?`${i+1}. `:''}{ item}
-          </div>
-        ))}
-      </div>
-    )
-    if(typeof val==='object') return (
-      <div style={{display:'flex',flexDirection:'column',gap:14}}>
-        {Object.entries(val).map(([k,v])=>(
-          <div key={k} className="sub-section">
-            <div className="sub-label">{k.replace(/([A-Z])/g,' $1').trim()}</div>
-            {Array.isArray(v)
-              ? <div className="pill-row">{v.map((x,i)=><span key={i} className="tag" style={{background:'rgba(212,168,67,.1)',borderColor:'rgba(212,168,67,.2)',color:'var(--gold)'}}>{x}</span>)}</div>
-              : <div className="body-text">{v}</div>}
-          </div>
-        ))}
-      </div>
-    )
-    return null
-  }
-
-  const activeCfg = SECTIONS.find(s=>s.key===activeSection)
-
-  return (
-    <div className="page fade">
-      <div style={{marginBottom:20}}>
-        <h1 className="serif" style={{fontSize:26,fontWeight:700,color:'var(--gold-lt)',marginBottom:4}}>📖 Études Bibliques</h1>
-        <p style={{fontSize:13,color:'var(--muted)'}}>Analyse complète pentecôtiste assistée par IA</p>
-      </div>
-
-      <div className="card" style={{marginBottom:20}}>
-        <div style={{display:'flex',gap:10,flexWrap:'wrap',marginBottom:error?12:0}}>
-          <input className="input" style={{flex:1,minWidth:180,fontFamily:'Cormorant Garamond,serif',fontSize:16}}
-            placeholder="Ex: Jean 3:16 ou Romains 8:28-30"
-            value={ref2} onChange={e=>setRef2(e.target.value)}
-            onKeyDown={e=>e.key==='Enter'&&analyser()}/>
-          <select className="input" style={{width:'auto',cursor:'pointer'}} value={langue} onChange={e=>setLangue(e.target.value)}>
-            <option value="fr">🇫🇷 Français</option>
-            <option value="ht">🇭🇹 Kreyòl</option>
-          </select>
-          <button className="btn btn-gold" onClick={analyser} disabled={loading} style={{whiteSpace:'nowrap'}}>
-            {loading?<><div className="spin" style={{borderTopColor:'#0E1117'}}/>Analyse...</>:'⚡ Analyser'}
-          </button>
-        </div>
-        {error && <div className="error-box" style={{marginTop:10,marginBottom:0}}>⚠ {error}</div>}
-      </div>
-
-      {result && (
-        <div className="fade">
-          {/* Header */}
-          <div className="card card-accent" style={{marginBottom:14}}>
-            <div className="serif" style={{fontSize:24,fontWeight:700,color:'var(--gold-lt)',marginBottom:6}}>✝ {result.reference}</div>
-            <div style={{fontSize:13,color:'#C8C0B0',fontStyle:'italic',lineHeight:1.6,marginBottom:12}}>{result.ideeGenerale}</div>
-            <div style={{display:'flex',flexWrap:'wrap',gap:16}}>
-              {[{l:'Auteur',v:result.auteur},{l:'Date',v:result.dateRedaction},{l:'Destinataires',v:result.destinataires}].map((m,i)=>(
-                <div key={i}>
-                  <span style={{fontSize:10,color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.8px'}}>{m.l}: </span>
-                  <span style={{fontSize:12,color:'var(--gold)',fontWeight:500}}>{m.v}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Pills */}
-          <div className="pill-row">
-            {SECTIONS.map(s=>(
-              <button key={s.key} className="pill" onClick={()=>setActiveSection(s.key)}
-                style={{borderColor:activeSection===s.key?s.color:'var(--border)',background:activeSection===s.key?`${s.color}22`:'var(--card)',color:activeSection===s.key?s.color:'var(--muted)',fontWeight:activeSection===s.key?600:400}}>
-                {s.icon} {s.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Content */}
-          {activeSection && activeCfg && (
-            <div className="section-content fade" style={{borderTop:`3px solid ${activeCfg.color}`}}>
-              <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:16}}>
-                <span style={{fontSize:20}}>{activeCfg.icon}</span>
-                <h2 className="serif" style={{fontSize:19,fontWeight:700,color:'var(--gold-lt)'}}>{activeCfg.label}</h2>
-              </div>
-              {renderVal(activeSection, result[activeSection])}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  )
 }
 
-// ══════════════════════════════════════════
-// HISTORIQUE
-// ══════════════════════════════════════════
-function Historique({ profile }) {
-  const [studies, setStudies] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState('')
-  const [expanded, setExpanded] = useState(null)
+// ─── ÉTUDES ───────────────────────────────
+const SC=[
+  {k:'texte',ic:'📜',lb:'Texte biblique',co:'#D4A843'},
+  {k:'contexteHistorique',ic:'🏛',lb:'Contexte historique',co:'#4A7FA5'},
+  {k:'contexteLitteraire',ic:'📚',lb:'Contexte littéraire',co:'#7A4A9A'},
+  {k:'analyseExegetique',ic:'🔍',lb:'Analyse exégétique',co:'#4A8A5A'},
+  {k:'analyseHermeneutique',ic:'🔑',lb:'Herméneutique',co:'#A07A3A'},
+  {k:'analyseTheologique',ic:'✝',lb:'Théologie',co:'#D4A843'},
+  {k:'analysePentecotiste',ic:'🔥',lb:'Pentecôtiste',co:'#A04A3A'},
+  {k:'applicationPratique',ic:'🌱',lb:'Application',co:'#4A8A5A'},
+  {k:'referencesCroisees',ic:'🔗',lb:'Réf. croisées',co:'#4A7FA5'},
+  {k:'questionsReflexion',ic:'💭',lb:'Questions',co:'#7A4A9A'},
+  {k:'planEnseignement',ic:'📋',lb:"Plan d'enseig.",co:'#8A6A20'},
+];
 
-  useEffect(()=>{
-    if(!profile?.uid){setLoading(false);return}
-    waitFB().then(fb=>{
-      fb.get(fb.ref(fb.db, `studies/${profile.uid}`)).then(snap=>{
-        if(snap.exists()){
-          const all = Object.entries(snap.val()).map(([id,v])=>({id,...v}))
-          all.sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt))
-          setStudies(all)
-        }
-        setLoading(false)
-      }).catch(()=>setLoading(false))
-    })
-  },[profile])
-
-  const filtered = studies.filter(s=>
-    (s.reference||'').toLowerCase().includes(search.toLowerCase())||
-    (s.ideeGenerale||'').toLowerCase().includes(search.toLowerCase())
-  )
-
-  return (
-    <div className="page fade">
-      <div style={{marginBottom:20}}>
-        <h1 className="serif" style={{fontSize:26,fontWeight:700,color:'var(--gold-lt)',marginBottom:4}}>🕐 Historique</h1>
-        <p style={{fontSize:13,color:'var(--muted)'}}>Toutes vos études bibliques — {studies.length} au total</p>
-      </div>
-
-      <input className="input" style={{marginBottom:16}} placeholder="Rechercher une référence…"
-        value={search} onChange={e=>setSearch(e.target.value)}/>
-
-      {loading ? (
-        <div style={{display:'flex',justifyContent:'center',padding:40}}><div className="spin" style={{width:28,height:28}}/></div>
-      ) : filtered.length===0 ? (
-        <div className="card" style={{textAlign:'center',padding:'40px 20px',color:'var(--muted)'}}>
-          <div style={{fontSize:36,marginBottom:12}}>📭</div>
-          <div>Aucune étude trouvée</div>
-        </div>
-      ) : filtered.map(s=>(
-        <div key={s.id} className="hist-item" onClick={()=>setExpanded(expanded===s.id?null:s.id)}
-          style={{borderColor:expanded===s.id?'var(--gold)':'var(--border)'}}>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:12}}>
-            <div>
-              <div className="serif" style={{fontSize:18,fontWeight:700,color:'var(--gold-lt)',marginBottom:4}}>✝ {s.reference}</div>
-              <div style={{fontSize:12,color:'var(--muted)',lineHeight:1.5}}>{(s.ideeGenerale||'').slice(0,100)}{(s.ideeGenerale||'').length>100?'…':''}</div>
-            </div>
-            <div style={{fontSize:11,color:'#4A5568',whiteSpace:'nowrap'}}>{new Date(s.createdAt).toLocaleDateString('fr-FR',{day:'2-digit',month:'short',year:'numeric'})}</div>
-          </div>
-          {expanded===s.id && (
-            <div className="fade" style={{marginTop:14,borderTop:'1px solid var(--border)',paddingTop:14}}>
-              {s.texte && <div className="quote" style={{marginBottom:14}}>{s.texte}</div>}
-              {s.applicationPratique?.viePersonnelle && (
-                <div>
-                  <div style={{fontSize:10,fontWeight:600,letterSpacing:'1px',textTransform:'uppercase',color:'#4A8A5A',marginBottom:6}}>🌱 Application personnelle</div>
-                  <div className="body-text">{s.applicationPratique.viePersonnelle}</div>
-                </div>
-              )}
-              {s.planEnseignement?.titre && (
-                <div style={{marginTop:12,background:'var(--surface)',borderRadius:8,padding:12,fontSize:13,color:'#C8C0B0'}}>
-                  <span style={{color:'var(--gold)',fontWeight:600}}>Plan: </span>{s.planEnseignement.titre}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      ))}
-    </div>
-  )
+function pgEtudes(){
+  return `<div class="page fade">
+<div style="margin-bottom:14px"><div class="h1">📖 Études Bibliques</div><div class="mu">Analyse complète pentecôtiste par IA</div></div>
+<div class="card" style="margin-bottom:14px">
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <input class="inp" id="er" style="flex:1;min-width:150px;font-family:'Cormorant Garamond',serif;font-size:16px" placeholder="Ex: Jean 3:16 ou Romains 8:28" onkeydown="if(event.key==='Enter')lA()"/>
+    <select class="inp" id="el" style="width:auto;cursor:pointer"><option value="fr">🇫🇷 Français</option><option value="ht">🇭🇹 Kreyòl</option></select>
+    <button class="btn bg" id="eb" onclick="lA()" style="white-space:nowrap">⚡ Analyser</button>
+  </div>
+  <div id="ee" style="margin-top:8px"></div>
+</div>
+<div id="eres"></div>
+</div>`;
 }
 
-// ══════════════════════════════════════════
-// COMING SOON
-// ══════════════════════════════════════════
-function ComingSoon({ title, icon, desc, color }) {
-  return (
-    <div className="page fade">
-      <h1 className="serif" style={{fontSize:26,fontWeight:700,color:'var(--gold-lt)',marginBottom:4}}>{icon} {title}</h1>
-      <p style={{fontSize:13,color:'var(--muted)',marginBottom:28}}>{desc}</p>
-      <div className="card" style={{textAlign:'center',padding:'48px 24px',borderTop:`3px solid ${color}`}}>
-        <div style={{fontSize:48,marginBottom:16}}>{icon}</div>
-        <div className="serif" style={{fontSize:22,fontWeight:700,color:'var(--gold-lt)',marginBottom:10}}>Module en développement</div>
-        <div style={{fontSize:14,color:'var(--muted)',maxWidth:360,margin:'0 auto',lineHeight:1.7}}>
-          Ce module sera disponible dans la prochaine version de Salem DBS.
-        </div>
-        <div style={{display:'inline-block',marginTop:18,padding:'7px 18px',borderRadius:20,background:`${color}22`,border:`1px solid ${color}44`,fontSize:12,color,fontWeight:600}}>
-          Phase 2 — Prochainement
-        </div>
-      </div>
-    </div>
-  )
+function initEtudes(){if(etudeRes)showRes(etudeRes);}
+
+window.lA=async function(){
+  const rv=($('er')?.value||'').trim(),lang=$('el')?.value||'fr';
+  const ee=$('ee'),btn=$('eb'),res=$('eres');
+  if(!rv){ee.innerHTML='<div class="err-box">⚠ Entrez une référence biblique</div>';return}
+  ee.innerHTML='';res.innerHTML='';btn.disabled=true;
+  btn.innerHTML='<div class="spin" style="border-top-color:#0E1117"></div> Analyse...';
+  activeSec='texte';
+  const ll=lang==='fr'?'français':'créole haïtien';
+  const prompt=`Tu es un théologien pentecôtiste évangélique expert en exégèse et herméneutique biblique. Analyse le passage : "${rv}". Réponds en ${ll}, UNIQUEMENT en JSON valide sans markdown.
+JSON: {"reference":"","texte":"texte complet Louis Segond","auteur":"","dateRedaction":"","destinataires":"","ideeGenerale":"message central","contexteHistorique":"","contexteLitteraire":"","analyseExegetique":{"structure":"","motsCles":["","",""],"sensOriginal":"","intentionAuteur":""},"analyseHermeneutique":"","analyseTheologique":{"dieu":"","christ":"","salut":"","saintEsprit":"","eglise":""},"analysePentecotiste":{"baptemeSaintEsprit":"","donsSpirituels":"","sanctification":"","revival":"","mission":""},"applicationPratique":{"viePersonnelle":"","vieFamiliale":"","vieMinisterielle":"","vieMissionnaire":""},"referencesCroisees":["","",""],"questionsReflexion":["","",""],"planEnseignement":{"titre":"","introduction":"","points":["","",""],"conclusion":""}}`;
+  try{
+    const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1000,messages:[{role:'user',content:prompt}]})});
+    if(!r.ok)throw new Error(`API ${r.status}`);
+    const data=await r.json();
+    const raw=data.content.map(c=>c.text||'').join('');
+    let p;try{p=JSON.parse(raw.replace(/```json|```/g,'').trim());}catch(e){throw new Error('Réponse invalide');}
+    const study={...p,langue:lang,createdAt:new Date().toISOString()};
+    etudeRes=study;
+    try{await dbPush(`studies/${_uid}`,study);studies.unshift(study);}catch(e){}
+    showRes(study);
+  }catch(e){ee.innerHTML=`<div class="err-box">⚠ ${esc(e.message||'Erreur connexion')}</div>`;}
+  finally{btn.disabled=false;btn.innerHTML='⚡ Analyser';}
+};
+
+function showRes(st){
+  const el=$('eres');if(!el)return;
+  const cfg=SC.find(s=>s.k===activeSec)||SC[0];
+  el.innerHTML=`
+<div class="card fade" style="border-top:3px solid var(--gold);margin-bottom:11px">
+  <div class="sr" style="font-size:22px;font-weight:700;color:var(--glt);margin-bottom:4px">✝ ${esc(st.reference)}</div>
+  <div style="font-size:13px;color:#C8C0B0;font-style:italic;line-height:1.6;margin-bottom:10px">${esc(st.ideeGenerale)}</div>
+  <div style="display:flex;flex-wrap:wrap;gap:10px">
+    ${[{l:'Auteur',v:st.auteur},{l:'Date',v:st.dateRedaction},{l:'Destinataires',v:st.destinataires}].map(m=>`<div><span style="font-size:10px;color:var(--mut);text-transform:uppercase">${m.l}: </span><span style="font-size:12px;color:var(--gold);font-weight:500">${esc(m.v)}</span></div>`).join('')}
+  </div>
+</div>
+<div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px">
+  ${SC.map(s=>`<button onclick="sS('${s.k}')" class="pill" style="border-color:${activeSec===s.k?s.co:'var(--bord)'};color:${activeSec===s.k?s.co:'var(--mut)'};background:${activeSec===s.k?s.co+'22':'var(--card)'};font-weight:${activeSec===s.k?600:400}">${s.ic} ${s.lb}</button>`).join('')}
+</div>
+<div class="card fade" style="border-top:3px solid ${cfg.co}">
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><span style="font-size:19px">${cfg.ic}</span><div class="sr" style="font-size:18px;font-weight:700;color:var(--glt)">${cfg.lb}</div></div>
+  ${rVal(activeSec,st[activeSec])}
+</div>`;
 }
 
-// ══════════════════════════════════════════
-// MAIN APP
-// ══════════════════════════════════════════
-function App() {
-  const [user, setUser] = useState(null)
-  const [profile, setProfile] = useState(null)
-  const [authReady, setAuthReady] = useState(false)
-  const [page, setPage] = useState('dashboard')
-  const [sidebarOpen, setSidebarOpen] = useState(false)
+window.sS=function(k){activeSec=k;showRes(etudeRes);};
 
-  useEffect(()=>{
-    waitFB().then(fb=>{
-      fb.onAuthStateChanged(fb.auth, async u=>{
-        if(u){
-          setUser(u)
-          const snap = await fb.get(fb.ref(fb.db, `users/${u.uid}`))
-          setProfile(snap.exists()?snap.val():{ uid:u.uid, firstName:u.displayName?.split(' ')[0]||'', lastName:u.displayName?.split(' ')[1]||'', role:'USER' })
-        } else { setUser(null); setProfile(null) }
-        setAuthReady(true)
-      })
-    })
-  },[])
-
-  async function handleLogin(u, p) { setUser(u); setProfile(p||{uid:u.uid,firstName:u.displayName?.split(' ')[0]||'',role:'USER'}); setPage('dashboard') }
-  async function handleLogout() {
-    const fb = await waitFB()
-    await fb.signOut(fb.auth)
-    setUser(null); setProfile(null)
-  }
-
-  if(!authReady) return (
-    <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'var(--bg)'}}>
-      <div style={{textAlign:'center'}}>
-        <div style={{fontSize:36,marginBottom:16}}>✝</div>
-        <div className="spin" style={{width:28,height:28,margin:'0 auto'}}/>
-      </div>
-    </div>
-  )
-
-  if(!user) return <LoginPage onLogin={handleLogin}/>
-
-  const pages = {
-    dashboard:  <Dashboard profile={profile} setPage={setPage}/>,
-    etudes:     <Etudes profile={profile}/>,
-    historique: <Historique profile={profile}/>,
-    pastoral:   <ComingSoon title="Module Pastoral" icon="🎙" desc="Génération de sermons, formations et plans d'évangélisation" color="#7A4A9A"/>,
-    formation:  <ComingSoon title="Formation" icon="🎓" desc="Parcours disciples: Nouveaux convertis, Discipulat, Leadership, Ministère" color="#4A7FA5"/>,
-    profil:     <ComingSoon title="Mon Profil" icon="👤" desc="Données personnelles, ecclésiastiques et théologiques" color="#4A8A5A"/>,
-    eglises:    <ComingSoon title="Gestion des Églises" icon="⛪" desc="Inscription et administration des congrégations" color="#D4A843"/>,
-    membres:    <ComingSoon title="Gestion des Membres" icon="👥" desc="Registre complet des membres" color="#A07A3A"/>,
-  }
-
-  return (
-    <div className="app">
-      <Sidebar page={page} setPage={setPage} profile={profile} onLogout={handleLogout} open={sidebarOpen} onClose={()=>setSidebarOpen(false)}/>
-      <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',minWidth:0}}>
-        <header className="mob-header">
-          <div className="serif" style={{fontSize:18,fontWeight:700,color:'var(--gold-lt)'}}>✝ Salem DBS</div>
-          <button onClick={()=>setSidebarOpen(o=>!o)} style={{background:'none',border:'none',color:'var(--text)',fontSize:22,cursor:'pointer',padding:4}}>☰</button>
-        </header>
-        <main style={{flex:1,overflow:'auto',background:'var(--bg)'}}>
-          {pages[page]||pages.dashboard}
-        </main>
-      </div>
-    </div>
-  )
+function rVal(k,v){
+  if(v==null)return '<div style="color:var(--mut);font-style:italic">Non disponible</div>';
+  if(typeof v==='string')return `<div class="bt">${esc(v)}</div>`;
+  if(Array.isArray(v))return v.map((x,i)=>`<div style="padding:8px 11px;background:rgba(255,255,255,.03);border-radius:6px;border-left:2px solid var(--gold);font-size:13px;color:#C8C0B0;line-height:1.6;margin-bottom:6px">${k==='questionsReflexion'?`${i+1}. `:''}${esc(x)}</div>`).join('');
+  if(typeof v==='object')return Object.entries(v).map(([key,val])=>`<div style="margin-bottom:12px"><div style="font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--gold);margin-bottom:5px">${esc(key.replace(/([A-Z])/g,' $1').trim())}</div>${Array.isArray(val)?val.map(x=>`<span style="display:inline-block;margin:0 4px 4px 0;padding:4px 10px;background:rgba(212,168,67,.1);border:1px solid rgba(212,168,67,.2);border-radius:20px;font-size:12px;color:var(--gold)">${esc(x)}</span>`).join(''):`<div class="bt">${esc(val)}</div>`}</div>`).join('');
+  return '';
 }
 
-ReactDOM.createRoot(document.getElementById('root')).render(<App/>)
+// ─── HISTORIQUE ───────────────────────────
+function pgHist(){
+  return `<div class="page fade">
+<div style="margin-bottom:14px"><div class="h1">🕐 Historique</div><div class="mu" id="hc">Chargement…</div></div>
+<input class="inp" id="hs" placeholder="Rechercher…" oninput="fH()" style="margin-bottom:12px"/>
+<div id="hl"><div style="display:flex;justify-content:center;padding:32px"><div class="spin" style="width:24px;height:24px"></div></div></div>
+</div>`;
+}
+
+async function initHist(){
+  try{const d=await dbGet(`studies/${_uid}`);histAll=d&&typeof d==='object'?Object.entries(d).map(([id,v])=>({id,...v})).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)):[];}catch(e){histAll=[];}
+  const c=$('hc');if(c)c.textContent=`${histAll.length} étude${histAll.length!==1?'s':''} au total`;
+  rH(histAll);
+}
+
+window.fH=function(){
+  const q=($('hs')?.value||'').toLowerCase();
+  rH(q?histAll.filter(s=>(s.reference||'').toLowerCase().includes(q)||(s.ideeGenerale||'').toLowerCase().includes(q)):histAll);
+};
+
+function rH(list){
+  const el=$('hl');if(!el)return;
+  if(!list.length){el.innerHTML='<div class="card" style="text-align:center;padding:30px;color:var(--mut)"><div style="font-size:28px;margin-bottom:9px">📭</div>Aucune étude trouvée</div>';return;}
+  el.innerHTML=list.map(s=>`
+<div class="hi${histExp===s.id?' ex':''}" onclick="tH('${s.id}')">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
+    <div><div class="sr" style="font-size:16px;font-weight:700;color:var(--glt)">✝ ${esc(s.reference)}</div><div style="font-size:12px;color:var(--mut);margin-top:2px;line-height:1.5">${esc((s.ideeGenerale||'').slice(0,100))}${(s.ideeGenerale||'').length>100?'…':''}</div></div>
+    <div style="font-size:11px;color:#4A5568;white-space:nowrap">${new Date(s.createdAt).toLocaleDateString('fr-FR',{day:'2-digit',month:'short',year:'numeric'})}</div>
+  </div>
+  ${histExp===s.id?`<div class="fade" style="margin-top:11px;border-top:1px solid var(--bord);padding-top:11px">
+    ${s.texte?`<div class="qt" style="margin-bottom:11px">${esc(s.texte)}</div>`:''}
+    ${s.applicationPratique?.viePersonnelle?`<div style="margin-bottom:9px"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:#4A8A5A;margin-bottom:4px">🌱 Application personnelle</div><div class="bt">${esc(s.applicationPratique.viePersonnelle)}</div></div>`:''}
+    ${s.planEnseignement?.titre?`<div style="background:var(--sur);border-radius:7px;padding:10px;font-size:13px;color:#C8C0B0"><span style="color:var(--gold);font-weight:600">Plan: </span>${esc(s.planEnseignement.titre)}</div>`:''}
+  </div>`:''}
+</div>`).join('');
+}
+
+window.tH=function(id){
+  histExp=histExp===id?null:id;
+  const q=($('hs')?.value||'').toLowerCase();
+  rH(q?histAll.filter(s=>(s.reference||'').toLowerCase().includes(q)):histAll);
+};
+
+// ─── COMING SOON ──────────────────────────
+function pgCS(ic,ti,ds,co){
+  return `<div class="page fade"><div class="h1">${ic} ${esc(ti)}</div><div class="mu" style="margin-bottom:20px">${esc(ds)}</div>
+<div class="card" style="text-align:center;padding:38px 18px;border-top:3px solid ${co}">
+  <div style="font-size:40px;margin-bottom:12px">${ic}</div>
+  <div class="sr" style="font-size:20px;font-weight:700;color:var(--glt);margin-bottom:9px">Module en développement</div>
+  <div style="font-size:14px;color:var(--mut);max-width:300px;margin:0 auto;line-height:1.7">Disponible dans la prochaine version de Salem DBS.</div>
+  <div style="display:inline-block;margin-top:13px;padding:6px 16px;border-radius:20px;background:${co}22;border:1px solid ${co}44;font-size:12px;color:${co};font-weight:600">Phase 2 — Prochainement</div>
+</div></div>`;
+}
+
+// ─── BOOT ─────────────────────────────────
+if(restoreSession()){
+  loadProfil();
+}else{
+  showLogin();
+}
 </script>
 </body>
 </html>
