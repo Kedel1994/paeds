@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Salem DBS</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@300;400;500;600;700&display=swap');
+:root{--bg:#0E1117;--sur:#161B26;--card:#1C2333;--bord:#2A3348;--gold:#D4A843;--glt:#F0CF89;--gdim:#8A6A20;--txt:#E8E2D5;--mut:#8A95A8;--err:#A04A3A}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;font-family:'Inter',sans-serif;background:var(--bg);color:var(--txt);-webkit-font-smoothing:antialiased}
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:var(--bord);border-radius:2px}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+.fade{animation:fadeUp .3s ease}
+.spin{display:inline-block;width:18px;height:18px;border:2px solid var(--bord);border-top-color:var(--gold);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle}
+#app{display:flex;height:100vh;overflow:hidden}
+#sidebar{width:230px;min-width:230px;background:var(--sur);border-right:1px solid var(--bord);display:flex;flex-direction:column;height:100vh;overflow-y:auto;z-index:100;transition:left .25s}
+#content{flex:1;overflow:auto;background:var(--bg);min-width:0}
+#mobbar{display:none;align-items:center;justify-content:space-between;padding:13px 16px;background:var(--sur);border-bottom:1px solid var(--bord);position:sticky;top:0;z-index:10}
+#overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99}
+@media(max-width:720px){
+  #sidebar{position:fixed;left:-230px;top:0;bottom:0}
+  #sidebar.open{left:0;box-shadow:4px 0 20px rgba(0,0,0,.5)}
+  #overlay.show{display:block}
+  #mobbar{display:flex!important}
+}
+.page{padding:22px 18px;max-width:840px;margin:0 auto}
+.sb-logo{padding:18px 16px;border-bottom:1px solid var(--bord);display:flex;align-items:center;gap:11px}
+.sb-cross{width:36px;height:36px;background:linear-gradient(135deg,var(--gdim),var(--gold));border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+.sb-user{padding:13px 16px;border-bottom:1px solid var(--bord);background:rgba(212,168,67,.04)}
+.sb-nav{flex:1;padding:8px}
+.sb-sec{font-size:10px;font-weight:600;letter-spacing:1.2px;color:#4A5568;padding:10px 10px 5px;text-transform:uppercase}
+.nav-btn{display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;border-radius:8px;font-size:13.5px;color:var(--mut);cursor:pointer;border:none;background:none;text-align:left;border-left:2px solid transparent;transition:all .15s;margin-bottom:2px;font-family:'Inter',sans-serif}
+.nav-btn:hover{color:var(--txt);background:rgba(255,255,255,.04)}
+.nav-btn.active{color:var(--gold);background:rgba(212,168,67,.1);border-left-color:var(--gold);font-weight:600}
+.sb-foot{padding:8px;border-top:1px solid var(--bord)}
+.card{background:var(--card);border:1px solid var(--bord);border-radius:12px;padding:20px}
+.inp{width:100%;background:var(--sur);border:1.5px solid var(--bord);border-radius:8px;padding:11px 13px;font-size:14px;color:var(--txt);outline:none;font-family:'Inter',sans-serif;transition:border-color .2s}
+.inp:focus{border-color:var(--gold)}
+.lbl{display:block;font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--mut);margin-bottom:7px}
+.btn{padding:11px 18px;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:7px;font-family:'Inter',sans-serif;transition:opacity .15s}
+.btn-gold{background:linear-gradient(135deg,var(--gdim),var(--gold));color:#0E1117}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.err{background:rgba(160,74,58,.15);border:1px solid rgba(160,74,58,.35);border-radius:8px;padding:10px 13px;font-size:13px;color:#E88A80;margin-bottom:13px}
+.tabs{display:flex;background:var(--sur);border-radius:8px;padding:3px;gap:3px;margin-bottom:18px}
+.tab{flex:1;padding:9px;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;transition:all .2s;background:transparent;color:var(--mut);font-family:'Inter',sans-serif}
+.tab.active{background:var(--gold);color:#0E1117}
+.serif{font-family:'Cormorant Garamond',serif}
+.h1{font-family:'Cormorant Garamond',serif;font-size:26px;font-weight:700;color:var(--glt);margin-bottom:4px}
+.muted{color:var(--mut);font-size:13px}
+.pill{display:inline-block;padding:6px 12px;border-radius:20px;font-size:12px;font-weight:500;border:1px solid;cursor:pointer;background:var(--card);font-family:'Inter',sans-serif}
+.quote{background:rgba(212,168,67,.06);border-left:3px solid var(--gold);border-radius:6px;padding:13px 15px;font-family:'Cormorant Garamond',serif;font-size:17px;font-style:italic;color:var(--glt);line-height:1.75}
+.body-txt{font-size:14px;line-height:1.8;color:#C8C0B0}
+.hist-item{background:var(--card);border:1px solid var(--bord);border-radius:10px;padding:14px 16px;cursor:pointer;margin-bottom:8px;transition:border-color .2s}
+.hist-item:hover,.hist-item.open{border-color:var(--gold)}
+.stat-card{background:var(--card);border:1px solid var(--bord);border-radius:12px;padding:16px;border-top:3px solid}
+.login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#0E1117,#161B26 50%,#1A1530);padding:24px 16px}
+.login-card{width:100%;max-width:390px;background:var(--card);border:1px solid var(--bord);border-radius:16px;padding:34px 26px;box-shadow:0 8px 40px rgba(0,0,0,.5)}
+</style>
+</head>
+<body>
+
+<!-- Firebase Compat (pas de module, marche partout) -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
+<div id="app">
+  <aside id="sidebar">
+    <div class="sb-logo">
+      <div class="sb-cross">✝</div>
+      <div>
+        <div class="serif" style="font-size:18px;font-weight:700;color:var(--glt)">Salem DBS</div>
+        <div style="font-size:10px;color:var(--mut);letter-spacing:1px">DÉCOUVERTE BIBLIQUE</div>
+      </div>
+    </div>
+    <div class="sb-user" id="sb-user-info"></div>
+    <nav class="sb-nav" id="sb-nav"></nav>
+    <div class="sb-foot">
+      <button class="nav-btn" onclick="doLogout()" style="width:100%"><span>🚪</span> Déconnexion</button>
+    </div>
+  </aside>
+  <div id="overlay" onclick="closeSidebar()"></div>
+  <div id="content">
+    <div id="mobbar">
+      <div class="serif" style="font-size:18px;font-weight:700;color:var(--glt)">✝ Salem DBS</div>
+      <button onclick="openSidebar()" style="background:none;border:none;color:var(--txt);font-size:22px;cursor:pointer;padding:4px">☰</button>
+    </div>
+    <div id="page-content"></div>
+  </div>
+</div>
+
+<script>
+// ── Firebase init ──
+firebase.initializeApp({
+  apiKey:"AIzaSyBjmJHuNe0GjblwBrP1Rakqr9HgZcfgYT8",
+  authDomain:"salem-dbs.firebaseapp.com",
+  databaseURL:"https://salem-dbs-default-rtdb.firebaseio.com",
+  projectId:"salem-dbs",
+  storageBucket:"salem-dbs.firebasestorage.app",
+  messagingSenderId:"1018849656489",
+  appId:"1:1018849656489:web:283f7174c426a7302373b8"
+});
+const auth = firebase.auth();
+const db   = firebase.database();
+
+// ── State ──
+let currentUser=null, currentProfile=null, currentPage='dashboard';
+let studiesCache=[], histAll=[], histExpanded=null;
+let etudeResult=null, activeSection=null;
+
+// ── Utils ──
+const $=id=>document.getElementById(id);
+const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+function fadeIn(el){el.classList.remove('fade');void el.offsetWidth;el.classList.add('fade')}
+
+// ── Sidebar ──
+window.openSidebar =()=>{$('sidebar').classList.add('open');$('overlay').classList.add('show')};
+window.closeSidebar=()=>{$('sidebar').classList.remove('open');$('overlay').classList.remove('show')};
+
+const NAV=[
+  {id:'dashboard',icon:'⊞',label:'Tableau de bord'},
+  {id:'etudes',icon:'📖',label:'Études Bibliques'},
+  {id:'pastoral',icon:'🎙',label:'Module Pastoral'},
+  {id:'formation',icon:'🎓',label:'Formation'},
+  {id:'historique',icon:'🕐',label:'Historique'},
+  {id:'profil',icon:'👤',label:'Mon Profil'},
+];
+
+function renderSidebar(){
+  const roleMap={SUPER_ADMIN:'⭐ Super Admin',CHURCH_ADMIN:'🏛 Admin Église',PASTOR:'✝ Pasteur',USER:'📖 Croyant'};
+  $('sb-user-info').innerHTML=`<div style="font-size:13px;font-weight:600;color:var(--txt)">${esc(currentProfile?.firstName)} ${esc(currentProfile?.lastName)}</div><div style="font-size:11px;color:var(--gold);margin-top:3px">${roleMap[currentProfile?.role]||'📖 Croyant'}</div>`;
+  $('sb-nav').innerHTML=`<div class="sb-sec">Navigation</div>${NAV.map(n=>`<button class="nav-btn${currentPage===n.id?' active':''}" onclick="goPage('${n.id}')"><span style="font-size:16px;width:20px;text-align:center">${n.icon}</span>${esc(n.label)}</button>`).join('')}`;
+}
+
+window.goPage=function(id){currentPage=id;renderSidebar();closeSidebar();renderPage()};
+
+// ══════════════════════════════════════════
+// LOGIN
+// ══════════════════════════════════════════
+function showLogin(){
+  $('sidebar').style.display='none';
+  document.body.style.overflow='auto';
+  $('page-content').innerHTML='';
+  const d=document.createElement('div');
+  d.className='login-wrap fade';
+  d.id='login-wrap';
+  d.innerHTML=`
+    <div class="login-card">
+      <div style="text-align:center;margin-bottom:24px">
+        <div style="display:inline-flex;width:50px;height:50px;background:linear-gradient(135deg,var(--gdim),var(--gold));border-radius:14px;align-items:center;justify-content:center;font-size:24px;margin-bottom:11px">✝</div>
+        <div class="serif" style="font-size:26px;font-weight:700;color:var(--glt)">Salem DBS</div>
+        <div style="font-size:11px;color:var(--mut);letter-spacing:1.5px;text-transform:uppercase;margin-top:4px">Découverte Biblique & Spirituelle</div>
+      </div>
+      <div class="tabs">
+        <button class="tab active" id="tab-l" onclick="switchTab('login')">Connexion</button>
+        <button class="tab" id="tab-r" onclick="switchTab('register')">Inscription</button>
+      </div>
+      <div id="auth-err"></div>
+      <div id="reg-fields" style="display:none;margin-bottom:2px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:13px">
+          <div><label class="lbl">Prénom</label><input class="inp" id="i-fn" placeholder="Jean"/></div>
+          <div><label class="lbl">Nom</label><input class="inp" id="i-ln" placeholder="Pierre"/></div>
+        </div>
+      </div>
+      <div style="margin-bottom:13px"><label class="lbl">Email</label><input class="inp" id="i-em" type="email" placeholder="nom@email.com"/></div>
+      <div style="margin-bottom:13px"><label class="lbl">Mot de passe</label><input class="inp" id="i-pw" type="password" placeholder="••••••••"/></div>
+      <div id="conf-field" style="display:none;margin-bottom:13px"><label class="lbl">Confirmer</label><input class="inp" id="i-cpw" type="password" placeholder="••••••••"/></div>
+      <button class="btn btn-gold" id="auth-btn" onclick="doAuth()" style="width:100%;justify-content:center;padding:13px">→ Se connecter</button>
+      <div style="text-align:center;margin-top:16px;font-family:'Cormorant Garamond',serif;font-style:italic;font-size:14px;color:var(--gold);opacity:.8">"Ta parole est une lampe à mes pieds" — Ps 119:105</div>
+    </div>`;
+  // Replace content area
+  const content=$('content');
+  content.innerHTML='';
+  content.appendChild(d);
+  window._tab='login';
+}
+
+window.switchTab=function(t){
+  window._tab=t;
+  $('tab-l').classList.toggle('active',t==='login');
+  $('tab-r').classList.toggle('active',t==='register');
+  $('reg-fields').style.display=t==='register'?'block':'none';
+  $('conf-field').style.display=t==='register'?'block':'none';
+  $('auth-btn').textContent=t==='login'?'→ Se connecter':'→ Créer mon compte';
+  $('auth-err').innerHTML='';
+};
+
+window.doAuth=async function(){
+  const btn=$('auth-btn'),errEl=$('auth-err');
+  errEl.innerHTML='';btn.disabled=true;
+  btn.innerHTML='<div class="spin"></div> Patientez...';
+  try{
+    const em=$('i-em').value.trim(), pw=$('i-pw').value;
+    if(window._tab==='login'){
+      const c=await auth.signInWithEmailAndPassword(em,pw);
+      await loadProfile(c.user);
+    } else {
+      const fn=$('i-fn').value.trim(),ln=$('i-ln').value.trim(),cpw=$('i-cpw').value;
+      if(!fn||!ln) throw {message:'Entrez votre prénom et nom'};
+      if(pw!==cpw) throw {message:'Les mots de passe sont différents'};
+      if(pw.length<6) throw {message:'Minimum 6 caractères'};
+      const c=await auth.createUserWithEmailAndPassword(em,pw);
+      await c.user.updateProfile({displayName:`${fn} ${ln}`});
+      const ud={uid:c.user.uid,firstName:fn,lastName:ln,email:em,role:'USER',createdAt:new Date().toISOString()};
+      await db.ref(`users/${c.user.uid}`).set(ud);
+      currentProfile=ud;
+      enterApp(c.user);
+    }
+  }catch(e){
+    const msgs={'auth/user-not-found':'Compte introuvable','auth/wrong-password':'Mot de passe incorrect','auth/email-already-in-use':'Email déjà utilisé','auth/invalid-credential':'Email ou mot de passe incorrect','auth/invalid-email':'Email invalide'};
+    errEl.innerHTML=`<div class="err">⚠ ${msgs[e.code]||e.message}</div>`;
+    btn.disabled=false;
+    btn.innerHTML=window._tab==='login'?'→ Se connecter':'→ Créer mon compte';
+  }
+};
+
+async function loadProfile(user){
+  try{
+    const snap=await db.ref(`users/${user.uid}`).get();
+    currentProfile=snap.exists()?snap.val():{uid:user.uid,firstName:user.displayName?.split(' ')[0]||'Utilisateur',lastName:user.displayName?.split(' ')[1]||'',role:'USER'};
+  }catch(e){
+    currentProfile={uid:user.uid,firstName:'Utilisateur',lastName:'',role:'USER'};
+  }
+  enterApp(user);
+}
+
+function enterApp(user){
+  currentUser=user;
+  $('sidebar').style.display='flex';
+  document.body.style.overflow='';
+  const content=$('content');
+  content.innerHTML=`
+    <div id="mobbar" style="display:none;align-items:center;justify-content:space-between;padding:13px 16px;background:var(--sur);border-bottom:1px solid var(--bord);position:sticky;top:0;z-index:10">
+      <div class="serif" style="font-size:18px;font-weight:700;color:var(--glt)">✝ Salem DBS</div>
+      <button onclick="openSidebar()" style="background:none;border:none;color:var(--txt);font-size:22px;cursor:pointer;padding:4px">☰</button>
+    </div>
+    <div id="page-content"></div>`;
+  currentPage='dashboard';
+  renderSidebar();
+  renderPage();
+}
+
+window.doLogout=async function(){
+  await auth.signOut();
+  currentUser=null;currentProfile=null;studiesCache=[];histAll=[];etudeResult=null;
+  showLogin();
+};
+
+// ══════════════════════════════════════════
+// ROUTER
+// ══════════════════════════════════════════
+function renderPage(){
+  const el=$('page-content');
+  if(!el)return;
+  const map={
+    dashboard:pageDashboard,etudes:pageEtudes,historique:pageHistorique,
+    pastoral:()=>pageCS('🎙','Module Pastoral','Génération de sermons et plans évangélisation','#7A4A9A'),
+    formation:()=>pageCS('🎓','Formation','Parcours disciples: Nouveaux convertis, Discipulat, Leadership','#4A7FA5'),
+    profil:()=>pageCS('👤','Mon Profil','Données personnelles et ecclésiastiques','#4A8A5A'),
+    eglises:()=>pageCS('⛪','Gestion des Églises','Administration des congrégations','#D4A843'),
+    membres:()=>pageCS('👥','Gestion des Membres','Registre complet des membres','#A07A3A'),
+  };
+  el.innerHTML=(map[currentPage]||pageDashboard)();
+  fadeIn(el);
+  if(currentPage==='dashboard')initDashboard();
+  if(currentPage==='etudes')initEtudes();
+  if(currentPage==='historique')initHistorique();
+}
+
+// ══════════════════════════════════════════
+// DASHBOARD
+// ══════════════════════════════════════════
+function pageDashboard(){
+  const h=new Date().getHours();
+  const gr=h<12?'Bonjour':h<18?'Bon après-midi':'Bonsoir';
+  return `<div class="page fade">
+  <div style="margin-bottom:20px"><div class="h1">${gr}, ${esc(currentProfile?.firstName)} 👋</div><div class="muted">Que la Parole de Dieu éclaire votre journée</div></div>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px">
+    <div class="stat-card" style="border-top-color:#D4A843"><div style="font-size:20px;margin-bottom:5px">📖</div><div class="serif" style="font-size:24px;font-weight:700;color:#D4A843" id="s1">—</div><div style="font-size:11px;color:var(--mut)">Études</div></div>
+    <div class="stat-card" style="border-top-color:#4A7FA5"><div style="font-size:20px;margin-bottom:5px">📅</div><div class="serif" style="font-size:24px;font-weight:700;color:#4A7FA5" id="s2">—</div><div style="font-size:11px;color:var(--mut)">Cette semaine</div></div>
+    <div class="stat-card" style="border-top-color:#7A4A9A"><div style="font-size:20px;margin-bottom:5px">✝</div><div class="serif" style="font-size:14px;font-weight:700;color:#7A4A9A;margin-top:4px">${currentProfile?.role==='PASTOR'?'Pasteur':currentProfile?.role==='SUPER_ADMIN'?'Admin':'Croyant'}</div><div style="font-size:11px;color:var(--mut);margin-top:4px">Rôle</div></div>
+  </div>
+  <div style="font-size:11px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--mut);margin-bottom:10px">Actions rapides</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:20px">
+    ${[['📖','Nouvelle étude','etudes','#D4A843'],['🎙','Sermon','pastoral','#7A4A9A'],['🎓','Formation','formation','#4A7FA5'],['🕐','Historique','historique','#4A8A5A']].map(([ic,lb,pg,co])=>`
+    <button onclick="goPage('${pg}')" style="display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--bord);border-radius:10px;padding:13px;cursor:pointer;text-align:left;width:100%" onmouseover="this.style.borderColor='${co}'" onmouseout="this.style.borderColor='var(--bord)'">
+      <div style="width:36px;height:36px;border-radius:8px;background:${co}22;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0">${ic}</div>
+      <div style="font-size:13px;font-weight:600;color:var(--txt)">${lb}</div>
+    </button>`).join('')}
+  </div>
+  <div style="font-size:11px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--mut);margin-bottom:10px">Études récentes</div>
+  <div id="recent-list"><div style="color:var(--mut);font-size:13px">Chargement…</div></div>
+  <div style="margin-top:18px;background:rgba(212,168,67,.06);border:1px solid rgba(212,168,67,.2);border-left:3px solid var(--gold);border-radius:12px;padding:16px">
+    <div style="font-size:10px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--gold);margin-bottom:8px">✝ Verset du jour</div>
+    <div class="serif" style="font-size:17px;font-style:italic;color:var(--txt);line-height:1.75;margin-bottom:7px">"Car je connais les projets que j'ai formés sur vous, dit l'Éternel, projets de paix et non de malheur, afin de vous donner un avenir et de l'espérance."</div>
+    <div style="font-size:12px;color:var(--mut)">Jérémie 29:11</div>
+  </div>
+</div>`;
+}
+
+async function initDashboard(){
+  if(!currentUser)return;
+  try{const snap=await db.ref(`studies/${currentUser.uid}`).get();studiesCache=snap.exists()?Object.values(snap.val()).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)):[];}catch(e){studiesCache=[];}
+  const s1=$('s1'),s2=$('s2'),rl=$('recent-list');
+  if(!s1)return;
+  const week=studiesCache.filter(s=>new Date(s.createdAt)>new Date(Date.now()-7*86400000)).length;
+  s1.textContent=studiesCache.length; s2.textContent=week;
+  if(!studiesCache.length){
+    rl.innerHTML=`<div class="card" style="text-align:center;padding:26px"><div style="font-size:28px;margin-bottom:10px">📖</div><div style="color:var(--mut);margin-bottom:12px">Aucune étude réalisée</div><button class="btn btn-gold" onclick="goPage('etudes')">→ Commencer</button></div>`;
+  } else {
+    rl.innerHTML=studiesCache.slice(0,4).map(s=>`<div class="hist-item" onclick="goPage('historique')"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px"><div><div class="serif" style="font-size:17px;font-weight:700;color:var(--glt)">✝ ${esc(s.reference)}</div><div style="font-size:12px;color:var(--mut);margin-top:2px">${esc((s.ideeGenerale||'').slice(0,80))}…</div></div><div style="font-size:11px;color:#4A5568;white-space:nowrap">${new Date(s.createdAt).toLocaleDateString('fr-FR',{day:'2-digit',month:'short'})}</div></div></div>`).join('');
+  }
+}
+
+// ══════════════════════════════════════════
+// ÉTUDES
+// ══════════════════════════════════════════
+const SCFG=[
+  {key:'texte',icon:'📜',label:'Texte biblique',color:'#D4A843'},
+  {key:'contexteHistorique',icon:'🏛',label:'Contexte historique',color:'#4A7FA5'},
+  {key:'contexteLitteraire',icon:'📚',label:'Contexte littéraire',color:'#7A4A9A'},
+  {key:'analyseExegetique',icon:'🔍',label:'Analyse exégétique',color:'#4A8A5A'},
+  {key:'analyseHermeneutique',icon:'🔑',label:'Analyse herméneutique',color:'#A07A3A'},
+  {key:'analyseTheologique',icon:'✝',label:'Analyse théologique',color:'#D4A843'},
+  {key:'analysePentecotiste',icon:'🔥',label:'Analyse pentecôtiste',color:'#A04A3A'},
+  {key:'applicationPratique',icon:'🌱',label:'Application pratique',color:'#4A8A5A'},
+  {key:'referencesCroisees',icon:'🔗',label:'Références croisées',color:'#4A7FA5'},
+  {key:'questionsReflexion',icon:'💭',label:'Questions de réflexion',color:'#7A4A9A'},
+  {key:'planEnseignement',icon:'📋',label:"Plan d'enseignement",color:'#8A6A20'},
+];
+
+function pageEtudes(){
+  return `<div class="page fade">
+  <div style="margin-bottom:16px"><div class="h1">📖 Études Bibliques</div><div class="muted">Analyse complète pentecôtiste assistée par IA</div></div>
+  <div class="card" style="margin-bottom:16px">
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <input class="inp" id="e-ref" style="flex:1;min-width:160px;font-family:'Cormorant Garamond',serif;font-size:16px" placeholder="Ex: Jean 3:16 ou Romains 8:28-30" onkeydown="if(event.key==='Enter')lancerAnalyse()"/>
+      <select class="inp" id="e-lang" style="width:auto;cursor:pointer"><option value="fr">🇫🇷 Français</option><option value="ht">🇭🇹 Kreyòl</option></select>
+      <button class="btn btn-gold" id="e-btn" onclick="lancerAnalyse()" style="white-space:nowrap">⚡ Analyser</button>
+    </div>
+    <div id="e-err" style="margin-top:8px"></div>
+  </div>
+  <div id="e-result"></div>
+</div>`;
+}
+
+function initEtudes(){if(etudeResult)showResult(etudeResult);}
+
+window.lancerAnalyse=async function(){
+  const rv=$('e-ref')?.value.trim(), lang=$('e-lang')?.value||'fr';
+  const errEl=$('e-err'), btn=$('e-btn'), resEl=$('e-result');
+  if(!rv){errEl.innerHTML='<div class="err">⚠ Entrez une référence biblique</div>';return}
+  errEl.innerHTML='';resEl.innerHTML='';btn.disabled=true;
+  btn.innerHTML='<div class="spin" style="border-top-color:#0E1117"></div> Analyse...';
+  activeSection='texte';
+  const ll=lang==='fr'?'français':'créole haïtien';
+  const prompt=`Tu es un théologien pentecôtiste évangélique expert en exégèse et herméneutique biblique.
+Analyse le passage biblique : "${rv}"
+Réponds en ${ll}, UNIQUEMENT en JSON valide, sans markdown, sans texte avant ou après.
+JSON:{"reference":"","texte":"texte complet Louis Segond","auteur":"","dateRedaction":"","destinataires":"","ideeGenerale":"","contexteHistorique":"","contexteLitteraire":"","analyseExegetique":{"structure":"","motsCles":["","",""],"sensOriginal":"","intentionAuteur":""},"analyseHermeneutique":"","analyseTheologique":{"dieu":"","christ":"","salut":"","saintEsprit":"","eglise":""},"analysePentecotiste":{"baptemeSaintEsprit":"","donsSpirituels":"","sanctification":"","revival":"","mission":""},"applicationPratique":{"viePersonnelle":"","vieFamiliale":"","vieMinisterielle":"","vieMissionnaire":""},"referencesCroisees":["","",""],"questionsReflexion":["","",""],"planEnseignement":{"titre":"","introduction":"","points":["","",""],"conclusion":""}}`;
+  try{
+    const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:1000,messages:[{role:'user',content:prompt}]})});
+    if(!r.ok) throw new Error(`Erreur API ${r.status}`);
+    const data=await r.json();
+    const raw=data.content.map(c=>c.text||'').join('');
+    let parsed;
+    try{parsed=JSON.parse(raw.replace(/```json|```/g,'').trim());}catch(e){throw new Error('Réponse invalide, réessayez');}
+    const study={...parsed,langue:lang,createdAt:new Date().toISOString()};
+    etudeResult=study;
+    if(currentUser){await db.ref(`studies/${currentUser.uid}`).push(study);studiesCache.unshift(study);}
+    showResult(study);
+  }catch(e){errEl.innerHTML=`<div class="err">⚠ ${esc(e.message||'Erreur de connexion')}</div>`;}
+  finally{btn.disabled=false;btn.innerHTML='⚡ Analyser';}
+};
+
+function showResult(study){
+  const el=$('e-result');if(!el)return;
+  const sec=activeSection||'texte';
+  const cfg=SCFG.find(s=>s.key===sec)||SCFG[0];
+  el.innerHTML=`
+  <div class="card fade" style="border-top:3px solid var(--gold);margin-bottom:12px">
+    <div class="serif" style="font-size:23px;font-weight:700;color:var(--glt);margin-bottom:5px">✝ ${esc(study.reference)}</div>
+    <div style="font-size:13px;color:#C8C0B0;font-style:italic;line-height:1.6;margin-bottom:10px">${esc(study.ideeGenerale)}</div>
+    <div style="display:flex;flex-wrap:wrap;gap:12px">
+      ${[{l:'Auteur',v:study.auteur},{l:'Date',v:study.dateRedaction},{l:'Destinataires',v:study.destinataires}].map(m=>`<div><span style="font-size:10px;color:var(--mut);text-transform:uppercase">${m.l}: </span><span style="font-size:12px;color:var(--gold);font-weight:500">${esc(m.v)}</span></div>`).join('')}
+    </div>
+  </div>
+  <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:11px">
+    ${SCFG.map(s=>`<button onclick="selSection('${s.key}')" class="pill" style="border-color:${sec===s.key?s.color:'var(--bord)'};color:${sec===s.key?s.color:'var(--mut)'};background:${sec===s.key?s.color+'22':'var(--card)'};font-weight:${sec===s.key?600:400}">${s.icon} ${s.label}</button>`).join('')}
+  </div>
+  <div class="card fade" style="border-top:3px solid ${cfg.color}">
+    <div style="display:flex;align-items:center;gap:9px;margin-bottom:13px"><span style="font-size:20px">${cfg.icon}</span><div class="serif" style="font-size:19px;font-weight:700;color:var(--glt)">${cfg.label}</div></div>
+    ${renderVal(sec,study[sec])}
+  </div>`;
+}
+
+window.selSection=function(k){activeSection=k;showResult(etudeResult);};
+
+function renderVal(key,val){
+  if(val==null) return '<div style="color:var(--mut);font-style:italic">Non disponible</div>';
+  if(typeof val==='string') return `<div class="body-txt">${esc(val)}</div>`;
+  if(Array.isArray(val)) return val.map((x,i)=>`<div style="padding:9px 12px;background:rgba(255,255,255,.03);border-radius:6px;border-left:2px solid var(--gold);font-size:13px;color:#C8C0B0;line-height:1.6;margin-bottom:6px">${key==='questionsReflexion'?`${i+1}. `:''}${esc(x)}</div>`).join('');
+  if(typeof val==='object') return Object.entries(val).map(([k,v])=>`<div style="margin-bottom:13px"><div style="font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--gold);margin-bottom:5px">${esc(k.replace(/([A-Z])/g,' $1').trim())}</div>${Array.isArray(v)?v.map(x=>`<span style="display:inline-block;margin:0 5px 5px 0;padding:4px 10px;background:rgba(212,168,67,.1);border:1px solid rgba(212,168,67,.2);border-radius:20px;font-size:12px;color:var(--gold)">${esc(x)}</span>`).join(''):`<div class="body-txt">${esc(v)}</div>`}</div>`).join('');
+  return '';
+}
+
+// ══════════════════════════════════════════
+// HISTORIQUE
+// ══════════════════════════════════════════
+function pageHistorique(){
+  return `<div class="page fade">
+  <div style="margin-bottom:16px"><div class="h1">🕐 Historique</div><div class="muted" id="h-count">Chargement…</div></div>
+  <input class="inp" id="h-search" placeholder="Rechercher une référence…" oninput="filterHist()" style="margin-bottom:13px"/>
+  <div id="h-list"><div style="display:flex;justify-content:center;padding:36px"><div class="spin" style="width:24px;height:24px"></div></div></div>
+</div>`;
+}
+
+async function initHistorique(){
+  try{const snap=await db.ref(`studies/${currentUser.uid}`).get();histAll=snap.exists()?Object.entries(snap.val()).map(([id,v])=>({id,...v})).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)):[];}catch(e){histAll=[];}
+  const c=$('h-count');if(c)c.textContent=`${histAll.length} étude${histAll.length!==1?'s':''} au total`;
+  renderHist(histAll);
+}
+
+window.filterHist=function(){
+  const q=($('h-search')?.value||'').toLowerCase();
+  renderHist(q?histAll.filter(s=>(s.reference||'').toLowerCase().includes(q)||(s.ideeGenerale||'').toLowerCase().includes(q)):histAll);
+};
+
+function renderHist(list){
+  const el=$('h-list');if(!el)return;
+  if(!list.length){el.innerHTML='<div class="card" style="text-align:center;padding:32px;color:var(--mut)"><div style="font-size:30px;margin-bottom:10px">📭</div>Aucune étude trouvée</div>';return;}
+  el.innerHTML=list.map(s=>`
+  <div class="hist-item${histExpanded===s.id?' open':''}" onclick="togHist('${s.id}')">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+      <div><div class="serif" style="font-size:17px;font-weight:700;color:var(--glt)">✝ ${esc(s.reference)}</div><div style="font-size:12px;color:var(--mut);margin-top:2px;line-height:1.5">${esc((s.ideeGenerale||'').slice(0,100))}${(s.ideeGenerale||'').length>100?'…':''}</div></div>
+      <div style="font-size:11px;color:#4A5568;white-space:nowrap">${new Date(s.createdAt).toLocaleDateString('fr-FR',{day:'2-digit',month:'short',year:'numeric'})}</div>
+    </div>
+    ${histExpanded===s.id?`<div class="fade" style="margin-top:12px;border-top:1px solid var(--bord);padding-top:12px">
+      ${s.texte?`<div class="quote" style="margin-bottom:12px">${esc(s.texte)}</div>`:''}
+      ${s.applicationPratique?.viePersonnelle?`<div style="margin-bottom:10px"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:#4A8A5A;margin-bottom:5px">🌱 Application personnelle</div><div class="body-txt">${esc(s.applicationPratique.viePersonnelle)}</div></div>`:''}
+      ${s.planEnseignement?.titre?`<div style="background:var(--sur);border-radius:8px;padding:10px;font-size:13px;color:#C8C0B0"><span style="color:var(--gold);font-weight:600">Plan: </span>${esc(s.planEnseignement.titre)}</div>`:''}
+    </div>`:''}
+  </div>`).join('');
+}
+
+window.togHist=function(id){
+  histExpanded=histExpanded===id?null:id;
+  const q=($('h-search')?.value||'').toLowerCase();
+  renderHist(q?histAll.filter(s=>(s.reference||'').toLowerCase().includes(q)):histAll);
+};
+
+// ══════════════════════════════════════════
+// COMING SOON
+// ══════════════════════════════════════════
+function pageCS(icon,title,desc,color){
+  return `<div class="page fade"><div class="h1">${icon} ${esc(title)}</div><div class="muted" style="margin-bottom:22px">${esc(desc)}</div>
+  <div class="card" style="text-align:center;padding:40px 20px;border-top:3px solid ${color}">
+    <div style="font-size:42px;margin-bottom:13px">${icon}</div>
+    <div class="serif" style="font-size:21px;font-weight:700;color:var(--glt);margin-bottom:10px">Module en développement</div>
+    <div style="font-size:14px;color:var(--mut);max-width:320px;margin:0 auto;line-height:1.7">Ce module sera disponible dans la prochaine version de Salem DBS.</div>
+    <div style="display:inline-block;margin-top:14px;padding:7px 18px;border-radius:20px;background:${color}22;border:1px solid ${color}44;font-size:12px;color:${color};font-weight:600">Phase 2 — Prochainement</div>
+  </div></div>`;
+}
+
+// ══════════════════════════════════════════
+// BOOT
+// ══════════════════════════════════════════
+auth.onAuthStateChanged(async user=>{
+  if(user){await loadProfile(user);}
+  else{showLogin();}
+});
+</script>
+</body>
+</html>
