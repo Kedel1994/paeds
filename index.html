@@ -370,14 +370,44 @@ window.lA=async function(){
   activeSec='texte';
   const ll=lang==='fr'?'français':'créole haïtien';
   const _gk=['sk-or-v1-23630c5c8cb7727780ab','a86eb862f1c29885bc922d03bad9642f78547c075eec'].join('');
-  const prompt=`Tu es un théologien pentecôtiste évangélique expert en exégèse et herméneutique biblique. Analyse le passage : "${rv}". Réponds en ${ll}, UNIQUEMENT en JSON valide sans markdown.
-JSON: {"reference":"","texte":"texte complet Louis Segond","auteur":"","dateRedaction":"","destinataires":"","ideeGenerale":"message central","contexteHistorique":"","contexteLitteraire":"","analyseExegetique":{"structure":"","motsCles":["","",""],"sensOriginal":"","intentionAuteur":""},"analyseHermeneutique":"","analyseTheologique":{"dieu":"","christ":"","salut":"","saintEsprit":"","eglise":""},"analysePentecotiste":{"baptemeSaintEsprit":"","donsSpirituels":"","sanctification":"","revival":"","mission":""},"applicationPratique":{"viePersonnelle":"","vieFamiliale":"","vieMinisterielle":"","vieMissionnaire":""},"referencesCroisees":["","",""],"questionsReflexion":["","",""],"planEnseignement":{"titre":"","introduction":"","points":["","",""],"conclusion":""}}`;
+  const prompt=`Réponds UNIQUEMENT avec un objet JSON valide, sans texte avant ou après, sans markdown.
+Analyse le passage biblique "${rv}" en ${ll}.
+
+{"reference":"${rv}","texte":"[texte exact du passage selon la Bible Louis Segond]","auteur":"[auteur humain du livre, ex: Jean l apotre, Paul, Moïse]","dateRedaction":"[période ex: 90 ap JC]","destinataires":"[à qui le livre était adressé]","ideeGenerale":"[message central en une phrase]","contexteHistorique":"[contexte historique et culturel]","contexteLitteraire":"[genre et structure du livre]","analyseExegetique":{"structure":"[structure du passage]","motsCles":["mot1","mot2","mot3"],"sensOriginal":"[sens original hébreu/grec]","intentionAuteur":"[intention de l auteur]"},"analyseHermeneutique":"[application du sens original aujourd hui]","analyseTheologique":{"dieu":"[révélation sur Dieu]","christ":"[christologie]","salut":"[sotériologie]","saintEsprit":"[pneumatologie]","eglise":"[ecclésiologie]"},"analysePentecotiste":{"baptemeSaintEsprit":"[enseignement]","donsSpirituels":"[dons]","sanctification":"[vie sainte]","revival":"[réveil]","mission":"[mission]"},"applicationPratique":{"viePersonnelle":"[application personnelle]","vieFamiliale":"[famille]","vieMinisterielle":"[ministère]","vieMissionnaire":"[mission]"},"referencesCroisees":["ref1","ref2","ref3"],"questionsReflexion":["question1?","question2?","question3?"],"planEnseignement":{"titre":"[titre]","introduction":"[intro]","points":["point1","point2","point3"],"conclusion":"[conclusion]"}}`;
   try{
-    const r=await fetch('https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+_gk,'HTTP-Referer':'https://kedel1994.github.io','X-Title':'Salem DBS'},body:JSON.stringify({model:'meta-llama/llama-3.1-8b-instruct',messages:[{role:'user',content:prompt}],max_tokens:8000})});
+    const r=await fetch('https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+_gk,'HTTP-Referer':'https://kedel1994.github.io','X-Title':'Salem DBS'},body:JSON.stringify({model:'mistralai/mistral-7b-instruct:free',messages:[{role:'user',content:prompt}],max_tokens:8000})});
     if(!r.ok){const errData=await r.json();throw new Error(`API ${r.status}: ${JSON.stringify(errData?.error||errData)}`);}
     const data=await r.json();
     const raw=data.choices?.[0]?.message?.content||'';
-    let p;try{p=JSON.parse(raw.replace(/```json|```/g,'').trim());}catch(e){throw new Error('Réponse invalide');}
+    let p;
+    try{
+      // Try direct parse first
+      let cleaned = raw.replace(/```json|```/g,'').trim();
+      // Find JSON object in response
+      const start = cleaned.indexOf('{');
+      const end = cleaned.lastIndexOf('}');
+      if(start>=0 && end>start) cleaned = cleaned.slice(start, end+1);
+      p = JSON.parse(cleaned);
+    }catch(e){
+      // Build partial object from raw text
+      p = {
+        reference: rv,
+        texte: raw.slice(0,500)||'Voir passage dans votre Bible',
+        auteur: 'Voir commentaire',
+        dateRedaction: '',
+        destinataires: '',
+        ideeGenerale: 'Analyse en cours — réessayez',
+        contexteHistorique: raw.slice(0,300)||'',
+        contexteLitteraire:'',
+        analyseExegetique:{structure:'',motsCles:[],sensOriginal:'',intentionAuteur:''},
+        analyseHermeneutique:'',
+        analyseTheologique:{dieu:'',christ:'',salut:'',saintEsprit:'',eglise:''},
+        analysePentecotiste:{baptemeSaintEsprit:'',donsSpirituels:'',sanctification:'',revival:'',mission:''},
+        applicationPratique:{viePersonnelle:'',vieFamiliale:'',vieMinisterielle:'',vieMissionnaire:''},
+        referencesCroisees:[],questionsReflexion:[],
+        planEnseignement:{titre:'',introduction:'',points:[],conclusion:''}
+      };
+    }
     const study={...p,langue:lang,createdAt:new Date().toISOString()};
     etudeRes=study;
     try{await dbPush(`studies/${_uid}`,study);studies.unshift(study);}catch(e){}
