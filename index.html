@@ -299,9 +299,12 @@ hr.sep{border:none;border-top:1px solid var(--navy-border);margin:16px 0;}
 <div class="toast-stack" id="toastStack"></div>
 <div id="printArea" class="print-only"></div>
 
-<div id="dbgPanel" style="position:fixed;left:0;right:0;bottom:0;max-height:55vh;overflow-y:auto;background:#05070f;border-top:2px solid #d4af37;font-family:monospace;font-size:11px;color:#9aa3c0;z-index:99999;padding:10px 12px;display:none;">
-  <div style="color:#f0cc5e;font-weight:bold;margin-bottom:6px;">🔍 Diagnostic PAEDS — n'efface jamais, fais défiler pour tout voir</div>
-  <div id="dbgLog"></div>
+<div id="dbgPanel" style="position:fixed;left:0;right:0;bottom:0;max-height:38px;overflow-y:auto;background:#05070f;border-top:2px solid #d4af37;font-family:monospace;font-size:11px;color:#9aa3c0;z-index:99999;padding:0;display:none;transition:max-height .2s;">
+  <div id="dbgHeader" onclick="toggleDbgPanel()" style="position:sticky;top:0;background:#05070f;color:#f0cc5e;font-weight:bold;padding:8px 12px;border-bottom:1px solid #27315a;display:flex;justify-content:space-between;align-items:center;cursor:pointer;">
+    <span>🔍 Diagnostic PAEDS <span id="dbgCount" style="color:#6b7393;font-weight:normal;"></span></span>
+    <span id="dbgToggleIcon">▲ agrandir</span>
+  </div>
+  <div id="dbgLog" style="padding:8px 12px;display:none;"></div>
 </div>
 
 <script>
@@ -309,14 +312,37 @@ hr.sep{border:none;border-top:1px solid var(--navy-border);margin:16px 0;}
 function dbg(msg, isError){
   const panel = document.getElementById('dbgPanel');
   const log = document.getElementById('dbgLog');
+  const countEl = document.getElementById('dbgCount');
   if(!panel || !log) return;
   panel.style.display = 'block';
+  window._dbgCount = (window._dbgCount||0) + 1;
+  if(countEl) countEl.textContent = '(' + window._dbgCount + ')';
   const t = new Date().toLocaleTimeString('fr-FR');
   const line = document.createElement('div');
   line.style.cssText = 'padding:3px 0;border-bottom:1px solid #1a2547;' + (isError?'color:#e0584f;':'color:#9aa3c0;');
   line.textContent = `[${t}] ${msg}`;
   log.appendChild(line);
-  panel.scrollTop = panel.scrollHeight;
+  if(window._dbgExpanded) panel.scrollTop = panel.scrollHeight;
+  // Reste réduit par défaut ; s'ouvre automatiquement seulement en cas d'erreur
+  if(isError && !window._dbgExpanded) toggleDbgPanel(true);
+}
+window._dbgExpanded = false;
+function toggleDbgPanel(forceOpen){
+  const panel = document.getElementById('dbgPanel');
+  const log = document.getElementById('dbgLog');
+  const icon = document.getElementById('dbgToggleIcon');
+  const willExpand = forceOpen === true ? true : !window._dbgExpanded;
+  window._dbgExpanded = willExpand;
+  if(willExpand){
+    panel.style.maxHeight = '55vh';
+    log.style.display = 'block';
+    icon.textContent = '▼ réduire';
+    panel.scrollTop = panel.scrollHeight;
+  } else {
+    panel.style.maxHeight = '38px';
+    log.style.display = 'none';
+    icon.textContent = '▲ agrandir';
+  }
 }
 dbg('Script démarré.');
 window.addEventListener('error', function(e){
