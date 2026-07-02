@@ -385,7 +385,7 @@ async function queueWhatsApp(destinataireNom, telephone, message, type){
 /* Vérifie les mandats du comité arrivant à expiration (30/15/7/1/0 jours) et met en file
    une notification unique par palier grâce au champ notifiedMilestones stocké sur le membre. */
 async function checkMandateExpirations(){
-  if(!isAdmin() && !isPasteur()) return;
+  if(!isAdmin()) return; // écrit dans membres/ — seul l'admin a les droits d'écriture sur ce nœud
   const snap = await R('membres').once('value');
   const today = new Date(); today.setHours(0,0,0,0);
   const paliers = [30,15,7,1,0];
@@ -402,6 +402,75 @@ async function checkMandateExpirations(){
     queueWhatsApp('Comité — '+m.fonction, '', msg, 'fin_mandat');
     R('membres/'+c.key+'/notifiedMilestones/'+joursRestants).set(true);
   });
+}
+
+/* Vérifie les activités dont la date est passée sans qu'un rapport ait été soumis,
+   et alerte le ministère concerné une seule fois par activité (flag rapportAlertSent). */
+async function checkOverdueActivityReports(){
+  if(!isAdmin() && !isPasteur()) return;
+  const [actSnap, repSnap, minSnap] = await Promise.all([
+    R('activites').once('value'), R('rapports').once('value'), R('ministeres').once('value')
+  ]);
+  const today = new Date(); today.setHours(0,0,0,0);
+  const todayStr = today.toISOString().slice(0,10);
+  let ministeres = {}; minSnap.forEach(c=>ministeres[c.key]=c.val());
+  let rapporteesIds = new Set();
+  repSnap.forEach(c=>{ const v=c.val(); if(v.activiteId) rapporteesIds.add(v.activiteId); });
+
+  actSnap.forEach(c=>{
+    const a = c.val();
+    if(!a.date || a.date >= todayStr) return;
+    if(a.statut === 'annulee' || a.statut === 'reportee') return;
+    if(a.ministereId === 'general') return;
+    if(rapporteesIds.has(c.key)) return;
+    if(a.rapportAlertSent) return;
+    const m = ministeres[a.ministereId];
+    if(!m || m.statut === 'suspendu') return;
+    queueWhatsApp(m.nom, m.whatsapp||m.telephone,
+      `⚠️ Rapport en retard : l'activité "${a.titre}" du ${fmtDate(a.date)} est passée sans rapport soumis. Merci de le soumettre rapidement sur PAEDS.`,
+      'rapport_retard');
+    R('activites/'+c.key).update({rapportAlertSent: true});
+  });
+}
+
+const MOIS_FR = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+function moisLabelFr(moisKey){ // "2026-06" -> "juin 2026"
+  const [y,m] = moisKey.split('-');
+  return MOIS_FR[parseInt(m,10)-1] + ' ' + y;
+}
+function isLastDayOfMonth(date){
+  const t = new Date(date); t.setDate(t.getDate()+1);
+  return t.getMonth() !== date.getMonth();
+}
+
+/* Vérifie que chaque ministère actif a soumis son rapport mensuel pour le mois précédent
+   (toujours vérifié, pour rattraper les retards) et pour le mois en cours si on est
+   précisément à son dernier jour. Une seule alerte par ministère et par mois. */
+async function checkMonthlyReports(){
+  if(!isAdmin()) return; // écrit dans ministeres/ — seul l'admin a les droits d'écriture sur ce nœud
+  const today = new Date();
+  const monthsToCheck = [];
+  const prevMonthDate = new Date(today.getFullYear(), today.getMonth()-1, 1);
+  monthsToCheck.push(prevMonthDate.toISOString().slice(0,7));
+  if(isLastDayOfMonth(today)) monthsToCheck.push(today.toISOString().slice(0,7));
+
+  const [minSnap, repSnap] = await Promise.all([R('ministeres').once('value'), R('rapports').once('value')]);
+  let ministeres = []; minSnap.forEach(c=>ministeres.push({id:c.key,...c.val()}));
+  let soumis = {}; // clé: ministereId|mois
+  repSnap.forEach(c=>{ const v=c.val(); if(v.type==='mensuel' && v.mois && v.ministereId) soumis[v.ministereId+'|'+v.mois] = true; });
+
+  for(const m of ministeres){
+    if(m.statut === 'suspendu') continue;
+    for(const mois of monthsToCheck){
+      if(soumis[m.id+'|'+mois]) continue;
+      const alertKey = 'alerteMensuelle_' + mois;
+      if(m[alertKey]) continue;
+      queueWhatsApp(m.nom, m.whatsapp||m.telephone,
+        `⚠️ Rapport mensuel manquant : le ministère n'a pas encore soumis son rapport mensuel pour ${moisLabelFr(mois)}. Merci de le soumettre sur PAEDS.`,
+        'rapport_mensuel_manquant');
+      await R('ministeres/'+m.id).update({[alertKey]: true});
+    }
+  }
 }
 
 /* ====================== AUTH ====================== */
@@ -479,6 +548,7 @@ const NAV_CONFIG = {
     ]},
     {group:'Gestion', items:[
       {id:'ministeres', label:'Ministères', icon:'⛪'},
+      {id:'comptes', label:'Comptes (Pasteur/Admin)', icon:'🔑'},
       {id:'membres', label:'Membres & Comités', icon:'👥'},
       {id:'activites', label:'Activités', icon:'📋'},
       {id:'financements', label:'Financements', icon:'💰'},
@@ -532,6 +602,8 @@ function initAppShell(){
   navTo('dashboard');
   watchNotifBadge();
   checkMandateExpirations();
+  checkOverdueActivityReports();
+  checkMonthlyReports();
 }
 function roleLabel(r){ return {admin:'Administrateur', pasteur:'Pasteur', responsable:'Responsable de ministère'}[r] || r; }
 
@@ -551,7 +623,7 @@ function navTo(view){
   const titles = {dashboard:'Tableau de bord', ministeres:'Gestion des ministères', membres:'Membres & Comités',
     activites:'Activités', financements:'Demandes de financement', rapports:'Rapports d\'activité',
     calendrier:'Calendrier annuel', publications:'Publications', rencontres:'Rencontres', journal:'Journal d\'audit',
-    notifications:'Notifications WhatsApp'};
+    notifications:'Notifications WhatsApp', comptes:'Comptes Pasteur / Administrateur'};
   document.getElementById('viewTitle').textContent = titles[view] || view;
   const fn = window['render_'+view];
   if(typeof fn === 'function'){ fn(); } else { document.getElementById('contentArea').innerHTML = '<div class="empty-state"><div class="ic">⚒</div><p>Module en construction.</p></div>'; }
@@ -631,8 +703,8 @@ async function render_dashboard(){
 
   if(!canSeeAll()){
     const mid = myMinistereId();
-    activites = activites.filter(a=>a.ministereId===mid);
-    rapports = rapports.filter(r=>r.ministereId===mid);
+    activites = activites.filter(a=>a.ministereId===mid || a.ministereId==='general');
+    rapports = rapports.filter(r=>r.ministereId===mid || r.ministereId==='general');
     financements = financements.filter(f=>f.ministereId===mid);
   }
 
@@ -644,6 +716,35 @@ async function render_dashboard(){
   const rapportsAttente = rapports.filter(r=>r.statut==='soumis');
   const demandesFinancement = financements.filter(f=>f.statut==='en_attente');
   const pubRecentes = publications.slice(-3).reverse();
+
+  // Calcul des alertes (visible pour admin/pasteur uniquement)
+  let alertesHtml = '';
+  if(canSeeAll()){
+    const rapporteesIds = new Set(rapports.filter(r=>r.activiteId).map(r=>r.activiteId));
+    const activitesEnRetard = activites.filter(a=>
+      a.date && a.date < todayStr && a.statut!=='annulee' && a.statut!=='reportee' &&
+      a.ministereId!=='general' && !rapporteesIds.has(a.id)
+    );
+    const ministeresIdx = {}; ministeres.forEach(m=>ministeresIdx[m.id]=m);
+    const moisPrecedent = (function(){ const d=new Date(today.getFullYear(), today.getMonth()-1, 1); return d.toISOString().slice(0,7); })();
+    const rapportsMensuelsSoumis = new Set(rapports.filter(r=>r.type==='mensuel').map(r=>r.ministereId+'|'+r.mois));
+    const ministeresSansRapportMensuel = ministeres.filter(m=>m.statut!=='suspendu' && !rapportsMensuelsSoumis.has(m.id+'|'+moisPrecedent));
+
+    if(activitesEnRetard.length || ministeresSansRapportMensuel.length){
+      alertesHtml = `
+        <div class="panel" style="border-color:rgba(224,88,79,.35);">
+          <div class="panel-head"><h3 style="color:var(--danger);">⚠️ Alertes</h3></div>
+          ${activitesEnRetard.length ? `
+            <div style="font-size:12.5px;color:var(--ink-dim);margin-bottom:8px;"><b style="color:var(--ink);">Rapports d'activité en retard (${activitesEnRetard.length}) :</b></div>
+            ${activitesEnRetard.map(a=>`<div style="padding:6px 0;border-bottom:1px solid var(--navy-border);font-size:12.5px;color:var(--ink-dim);">${esc(a.titre)} — ${esc((ministeresIdx[a.ministereId]||{}).nom||'—')} (${fmtDate(a.date)})</div>`).join('')}
+          ` : ''}
+          ${ministeresSansRapportMensuel.length ? `
+            <div style="font-size:12.5px;color:var(--ink-dim);margin:${activitesEnRetard.length?'14px':'0'} 0 8px;"><b style="color:var(--ink);">Rapports mensuels manquants pour ${moisLabelFr(moisPrecedent)} (${ministeresSansRapportMensuel.length}) :</b></div>
+            ${ministeresSansRapportMensuel.map(m=>`<div style="padding:6px 0;border-bottom:1px solid var(--navy-border);font-size:12.5px;color:var(--ink-dim);">${esc(m.nom)}</div>`).join('')}
+          ` : ''}
+        </div>`;
+    }
+  }
 
   let statsHtml = '';
   if(canSeeAll()){
@@ -668,6 +769,7 @@ async function render_dashboard(){
 
   el.innerHTML = `
     ${statsHtml}
+    ${alertesHtml}
     <div class="panel">
       <div class="panel-head"><h3>Activités d'aujourd'hui</h3><span class="panel-sub">${fmtDate(todayStr)}</span></div>
       ${activitesAVenir.length ? `<div class="table-wrap"><table><thead><tr><th>Titre</th><th>Type</th><th>Heure</th><th>Lieu</th><th>Statut</th></tr></thead><tbody>
@@ -841,7 +943,7 @@ async function openMinistryDetail(id){
     </div>
     <div class="modal-foot">
       ${isAdmin()?`
-        <button class="btn btn-ghost" onclick="resetMinistryPassword('${m.email}')">Réinitialiser mot de passe</button>
+        <button class="btn btn-ghost" onclick="sendPasswordReset('${m.email}', '${esc(m.responsable||m.nom).replace(/'/g,"&#39;")}')">🔑 Changer le mot de passe</button>
         <button class="btn btn-danger" onclick="suspendMinistry('${m.id}','${m.statut||'actif'}')">${m.statut==='suspendu'?'Réactiver':'Suspendre'}</button>
         <button class="btn btn-gold" onclick="closeModal();openMinistryForm(${JSON.stringify(m).replace(/"/g,'&quot;')})">Modifier</button>
       `:''}
@@ -849,10 +951,30 @@ async function openMinistryDetail(id){
   `);
 }
 
-async function resetMinistryPassword(email){
+/* Firebase ne permet pas à un administrateur de définir directement le mot de passe d'un
+   autre compte, pour des raisons de sécurité (seul un backend avec clé secrète le pourrait,
+   ce qui exposerait tout le système si intégré côté client). La méthode sûre et standard
+   est l'envoi d'un lien de réinitialisation par email à la personne concernée. */
+async function sendPasswordReset(email, nomPersonne){
+  if(!email){ toast('Aucun email associé à ce compte.','err'); return; }
+  openModal(`
+    <div class="modal-head"><h3>Changer le mot de passe</h3><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <p style="color:var(--ink-dim);font-size:13.5px;">Pour des raisons de sécurité, un administrateur ne peut pas taper directement un nouveau mot de passe à la place de quelqu'un d'autre.</p>
+      <p style="color:var(--ink-dim);font-size:13.5px;margin-top:10px;">La méthode sûre : un lien de réinitialisation sera envoyé par email à <b style="color:var(--ink);">${esc(nomPersonne||'')}</b> (${esc(email)}). En cliquant sur ce lien, la personne pourra choisir elle-même son nouveau mot de passe.</p>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-gold" onclick="confirmSendPasswordReset('${email}')">Envoyer le lien</button>
+    </div>
+  `);
+}
+async function confirmSendPasswordReset(email){
   try{
     await auth.sendPasswordResetEmail(email);
-    toast('Email de réinitialisation envoyé à '+email,'ok');
+    logAction('Lien de réinitialisation envoyé', email);
+    toast('Lien envoyé à '+email,'ok');
+    closeModal();
   }catch(e){ toast('Erreur : '+e.message,'err'); }
 }
 async function suspendMinistry(id, currentStatut){
@@ -866,8 +988,120 @@ async function suspendMinistry(id, currentStatut){
   render_ministeres();
 }
 
+/* ====================== COMPTES (Pasteur / Administrateur) ====================== */
+async function render_comptes(){
+  const el = document.getElementById('contentArea');
+  if(!isAdmin()){ el.innerHTML = '<div class="empty-state"><p>Accès réservé à l\'administrateur.</p></div>'; return; }
+  el.innerHTML = '<div class="empty-state"><p>Chargement…</p></div>';
+  let list = [];
+  try{
+    const snap = await R('users').once('value');
+    snap.forEach(c=>{ const v=c.val(); if(v.role==='admin' || v.role==='pasteur') list.push({id:c.key,...v}); });
+  }catch(e){
+    el.innerHTML = `<div class="empty-state"><div class="ic">⚠️</div><p>Impossible de lister les comptes (règle de sécurité manquante sur paeds/users).<br>Voir DEPLOIEMENT.md pour la règle à ajouter.</p></div>`;
+    return;
+  }
+  list.sort((a,b)=>(a.role||'').localeCompare(b.role||''));
+
+  el.innerHTML = `
+    <div style="display:flex;justify-content:flex-end;margin-bottom:16px;">
+      <button class="btn btn-gold" onclick="openAccountForm()">+ Nouveau compte Pasteur / Admin</button>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h3>Comptes existants (${list.length})</h3></div>
+      ${list.length ? `<div class="table-wrap"><table><thead><tr><th>Nom</th><th>Email</th><th>Rôle</th><th>Statut</th><th></th></tr></thead><tbody>
+        ${list.map(u=>`<tr>
+          <td><b style="color:var(--ink);">${esc(u.nom||'—')}</b></td>
+          <td>${esc(u.email||'—')}</td>
+          <td><span class="badge badge-gold">${u.role==='admin'?'Administrateur':'Pasteur'}</span></td>
+          <td>${statutBadge(u.statut||'actif')}</td>
+          <td style="white-space:nowrap;">
+            ${u.email?`<button class="btn btn-ghost btn-sm" onclick="sendPasswordReset('${u.email}', '${esc(u.nom||'').replace(/'/g,"&#39;")}')">🔑 Mot de passe</button>`:''}
+            <button class="btn btn-ghost btn-sm" onclick="suspendAccount('${u.id}','${u.statut||'actif'}')">${u.statut==='suspendu'?'Réactiver':'Suspendre'}</button>
+          </td>
+        </tr>`).join('')}
+      </tbody></table></div>` : `<div class="empty-state"><div class="ic">🔑</div><p>Aucun compte Pasteur ou Administrateur additionnel pour le moment.</p></div>`}
+    </div>
+  `;
+}
+
+function openAccountForm(){
+  openModal(`
+    <div class="modal-head"><h3>Nouveau compte</h3><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Nom complet</label><input id="f_accNom" placeholder="Ex: Pasteur Honoré"></div>
+      <div class="field"><label>Email (= identifiant de connexion)</label><input type="email" id="f_accEmail" placeholder="pasteur@eglisesalem.org"></div>
+      <div class="field"><label>Rôle</label><select id="f_accRole">
+        <option value="pasteur">Pasteur</option>
+        <option value="admin">Administrateur</option>
+      </select></div>
+      <div class="helper">Un mot de passe temporaire sera généré automatiquement. Tu pourras le communiquer à la personne concernée.</div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-gold" onclick="saveAccount()">Créer le compte</button>
+    </div>
+  `);
+}
+
+async function saveAccount(){
+  const nom = document.getElementById('f_accNom').value.trim();
+  const email = document.getElementById('f_accEmail').value.trim();
+  const role = document.getElementById('f_accRole').value;
+  if(!nom || !email){ toast('Le nom et l\'email sont obligatoires.','err'); return; }
+
+  const password = genPassword();
+  const secondaryApp = firebase.apps.find(a=>a.name==='secondary') || firebase.initializeApp(firebaseConfig,'secondary');
+  const secondaryAuth = secondaryApp.auth();
+  try{
+    const cred = await secondaryAuth.createUserWithEmailAndPassword(email, password);
+    const newUid = cred.user.uid;
+    await secondaryAuth.signOut();
+    await R('users/'+newUid).set({ role, nom, email, statut:'actif', createdAt: Date.now() });
+    logAction('Création compte '+role, nom);
+    closeModal();
+    openModal(`
+      <div class="modal-head"><h3>✅ Compte créé</h3><button class="modal-close" onclick="closeModal()">×</button></div>
+      <div class="modal-body">
+        <p style="color:var(--ink-dim);font-size:13.5px;">Identifiants pour ${esc(nom)} (${role==='admin'?'Administrateur':'Pasteur'}) :</p>
+        <div class="panel" style="margin-top:10px;">
+          <div style="font-size:12px;color:var(--ink-faint);">Identifiant</div>
+          <div style="font-size:15px;color:var(--gold-bright);margin-bottom:10px;">${esc(email)}</div>
+          <div style="font-size:12px;color:var(--ink-faint);">Mot de passe temporaire</div>
+          <div style="font-size:15px;color:var(--gold-bright);">${password}</div>
+        </div>
+        <div class="helper">Communique ces identifiants à la personne concernée.</div>
+      </div>
+      <div class="modal-foot"><button class="btn btn-gold" onclick="closeModal();render_comptes();">Compris</button></div>
+    `);
+  }catch(err){
+    let msg = "Erreur lors de la création du compte.";
+    if(err.code==='auth/email-already-in-use') msg="Cet email est déjà utilisé par un autre compte.";
+    if(err.code==='auth/weak-password') msg="Mot de passe généré trop faible (réessayez).";
+    if(err.code==='auth/invalid-email') msg="Email invalide.";
+    toast(msg,'err');
+  }
+}
+
+async function suspendAccount(uid, currentStatut){
+  const newStatut = currentStatut==='suspendu' ? 'actif' : 'suspendu';
+  await R('users/'+uid).update({statut:newStatut});
+  logAction(newStatut==='suspendu'?'Suspension compte':'Réactivation compte', uid);
+  toast(newStatut==='suspendu'?'Compte suspendu.':'Compte réactivé.','ok');
+  render_comptes();
+}
+
 /* ====================== ACTIVITÉS ====================== */
 const TYPES_ACTIVITE = ['Evangélisation','Réunion','Camp','Jeûne','Convention','Formation','Conférence','Répétition','Visite','Action sociale','Collecte','Prière','Autre'];
+function ministryLabel(mid){
+  if(mid==='general') return 'Administration Générale';
+  return (window._ministeresCache && window._ministeresCache[mid] && window._ministeresCache[mid].nom) || '—';
+}
+function canManageItem(item){
+  if(isAdmin()) return true;
+  if(item.ministereId === 'general') return isPasteur();
+  return item.ministereId === myMinistereId();
+}
 
 async function render_activites(){
   const el = document.getElementById('contentArea');
@@ -875,7 +1109,7 @@ async function render_activites(){
   const [actSnap, minSnap] = await Promise.all([R('activites').once('value'), R('ministeres').once('value')]);
   let list = []; actSnap.forEach(c=>list.push({id:c.key,...c.val()}));
   let ministeres = {}; minSnap.forEach(c=>ministeres[c.key]=c.val());
-  if(!canSeeAll()) list = list.filter(a=>a.ministereId===myMinistereId());
+  if(!canSeeAll()) list = list.filter(a=>a.ministereId===myMinistereId() || a.ministereId==='general');
   list.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   window._activitesCache = list; window._ministeresCache = ministeres;
 
@@ -888,7 +1122,7 @@ async function render_activites(){
         <span class="tag-filter" data-f="reportee" onclick="filterActivites('reportee')">Reportées</span>
         <span class="tag-filter" data-f="annulee" onclick="filterActivites('annulee')">Annulées</span>
       </div>
-      ${(isResponsable())?`<button class="btn btn-gold" onclick="openActivityForm()">+ Nouvelle activité</button>`:''}
+      ${(isResponsable() || isAdmin() || isPasteur())?`<button class="btn btn-gold" onclick="openActivityForm()">+ Nouvelle activité</button>`:''}
     </div>
     <div id="activitesTableWrap"></div>
   `;
@@ -908,8 +1142,8 @@ function renderActivitesTable(list, ministeres){
     <th>Titre</th>${canSeeAll()?'<th>Ministère</th>':''}<th>Type</th><th>Date</th><th>Lieu</th><th>Budget</th><th>Statut</th><th></th>
   </tr></thead><tbody>
     ${list.map(a=>`<tr style="cursor:pointer;" onclick="openActivityDetail('${a.id}')">
-      <td><b style="color:var(--ink);">${esc(a.titre)}</b></td>
-      ${canSeeAll()?`<td>${esc((ministeres[a.ministereId]||{}).nom||'—')}</td>`:''}
+      <td><b style="color:var(--ink);">${esc(a.titre)}</b>${a.ministereId==='general'?' <span class="badge badge-gold" style="margin-left:4px;">Général</span>':''}</td>
+      ${canSeeAll()?`<td>${esc(ministryLabel(a.ministereId))}</td>`:''}
       <td>${esc(a.type)}</td>
       <td>${fmtDate(a.date)}</td>
       <td>${esc(a.lieu||'—')}</td>
@@ -985,13 +1219,17 @@ async function saveActivity(existingId){
     logAction('Modification activité', data.titre);
     toast('Activité mise à jour.','ok');
   } else {
-    data.ministereId = myMinistereId();
+    data.ministereId = myMinistereId() || 'general';
     data.statut = 'planifiee';
     data.createdBy = currentProfile.nom;
     data.createdAt = Date.now();
     await R('activites').push(data);
     logAction('Nouvelle activité', data.titre);
-    queueWhatsApp('Administration & Pasteur', '', `Nouvelle activité "${data.titre}" créée par ${currentProfile.nom} pour le ${fmtDate(data.date)}. Consultez PAEDS pour plus de détails.`, 'activite');
+    if(data.ministereId === 'general'){
+      notifyAllMinisteres(`Nouvelle activité générale "${data.titre}" créée par l'administration pour le ${fmtDate(data.date)}. Consultez PAEDS pour plus de détails.`, 'activite');
+    } else {
+      queueWhatsApp('Administration & Pasteur', '', `Nouvelle activité "${data.titre}" créée par ${currentProfile.nom} pour le ${fmtDate(data.date)}. Consultez PAEDS pour plus de détails.`, 'activite');
+    }
     toast('Activité créée.','ok');
   }
   closeModal();
@@ -1001,12 +1239,11 @@ async function saveActivity(existingId){
 async function openActivityDetail(id){
   const snap = await R('activites/'+id).once('value');
   const a = {id, ...snap.val()};
-  const ministere = (window._ministeresCache||{})[a.ministereId] || {};
-  const isMine = a.ministereId === myMinistereId();
+  const isMine = canManageItem(a);
   openModal(`
     <div class="modal-head"><h3>${esc(a.titre)}</h3><button class="modal-close" onclick="closeModal()">×</button></div>
     <div class="modal-body">
-      <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">${statutBadge(a.statut)}<span class="badge badge-gold">${esc(a.type)}</span>${canSeeAll()?`<span class="badge badge-mute">${esc(ministere.nom||'')}</span>`:''}</div>
+      <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">${statutBadge(a.statut)}<span class="badge badge-gold">${esc(a.type)}</span>${canSeeAll()?`<span class="badge badge-mute">${esc(ministryLabel(a.ministereId))}</span>`:''}</div>
       <p style="color:var(--ink-dim);font-size:13px;"><b style="color:var(--ink);">Date :</b> ${fmtDate(a.date)} ${a.heure?'à '+a.heure:''} · <b style="color:var(--ink);">Lieu :</b> ${esc(a.lieu||'—')}</p>
       <p style="color:var(--ink-dim);font-size:13px;"><b style="color:var(--ink);">Responsable :</b> ${esc(a.responsableActivite||'—')}</p>
       ${a.description?`<p style="color:var(--ink-dim);font-size:13px;">${esc(a.description)}</p>`:''}
@@ -1019,7 +1256,7 @@ async function openActivityDetail(id){
     <div class="modal-foot" style="flex-wrap:wrap;">
       ${isMine ? `<button class="btn btn-ghost btn-sm" onclick="closeModal();openActivityForm(${JSON.stringify(a).replace(/"/g,'&quot;')})">Modifier</button>` : ''}
       ${isMine && a.statut!=='terminee' && a.statut!=='annulee' ? `<button class="btn btn-ghost btn-sm" onclick="changeActivityStatus('${a.id}')">Statut</button>` : ''}
-      ${isMine ? `<button class="btn btn-ghost btn-sm" onclick="closeModal();openFinancingForm('${a.id}')">Demande de financement</button>` : ''}
+      ${isMine && a.ministereId!=='general' ? `<button class="btn btn-ghost btn-sm" onclick="closeModal();openFinancingForm('${a.id}')">Demande de financement</button>` : ''}
       ${isMine && a.statut==='terminee' ? `<button class="btn btn-ghost btn-sm" onclick="closeModal();openReportForm('${a.id}')">Rédiger rapport</button>` : ''}
       <button class="btn btn-gold btn-sm" onclick="closeModal()">Fermer</button>
     </div>
@@ -1266,20 +1503,81 @@ async function render_rapports(){
   el.innerHTML = '<div class="empty-state"><p>Chargement…</p></div>';
   const snap = await R('rapports').once('value');
   let list = []; snap.forEach(c=>list.push({id:c.key,...c.val()}));
-  if(!canSeeAll()) list = list.filter(r=>r.ministereId===myMinistereId());
+  if(!canSeeAll()) list = list.filter(r=>r.ministereId===myMinistereId() || r.ministereId==='general');
   list.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
 
-  el.innerHTML = `<div class="panel"><div class="table-wrap"><table><thead><tr>
-    <th>Activité</th><th>Date</th><th>Budget utilisé</th><th>Statut</th><th></th>
+  el.innerHTML = `
+    ${isResponsable() ? `<div style="display:flex;justify-content:flex-end;margin-bottom:14px;"><button class="btn btn-gold" onclick="openMonthlyReportForm()">+ Rapport mensuel</button></div>` : ''}
+    <div class="panel"><div class="table-wrap"><table><thead><tr>
+    <th>Rapport</th><th>Type</th><th>Date</th><th>Budget utilisé</th><th>Statut</th><th></th>
   </tr></thead><tbody>
     ${list.length ? list.map(r=>`<tr style="cursor:pointer;" onclick="openReportDetail('${r.id}')">
       <td><b style="color:var(--ink);">${esc(r.nom)}</b></td>
+      <td><span class="badge ${r.type==='mensuel'?'badge-gold':'badge-mute'}">${r.type==='mensuel'?'Mensuel':'Activité'}</span></td>
       <td>${fmtDate(r.date)}</td>
       <td>${fmtMoney(r.budgetUtilise)}</td>
       <td>${statutBadge(r.statut)}</td>
       <td>›</td>
-    </tr>`).join('') : `<tr><td colspan="5"><div class="empty-state"><div class="ic">📄</div><p>Aucun rapport.</p></div></td></tr>`}
+    </tr>`).join('') : `<tr><td colspan="6"><div class="empty-state"><div class="ic">📄</div><p>Aucun rapport.</p></div></td></tr>`}
   </tbody></table></div></div>`;
+}
+
+function openMonthlyReportForm(){
+  const now = new Date();
+  const defaultMois = now.toISOString().slice(0,7);
+  openModal(`
+    <div class="modal-head"><h3>Rapport mensuel</h3><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Mois concerné</label><input type="month" id="f_moisRapport" value="${defaultMois}"></div>
+      <div class="field"><label>Résumé des activités du mois</label><textarea id="f_moisResume" style="min-height:100px;" placeholder="Vue d'ensemble des activités réalisées ce mois-ci…"></textarea></div>
+      <div class="field"><label>Résultats / avancées</label><textarea id="f_moisResultats"></textarea></div>
+      <div class="field"><label>Difficultés rencontrées</label><textarea id="f_moisDifficultes"></textarea></div>
+      <div class="field"><label>Recommandations</label><textarea id="f_moisRecommandations"></textarea></div>
+      <hr class="sep">
+      <div class="grid2">
+        <div class="field"><label>Entrées du mois (G)</label><input type="number" id="f_moisEntrees" value="0"></div>
+        <div class="field"><label>Sorties du mois (G)</label><input type="number" id="f_moisSorties" value="0"></div>
+      </div>
+      <div class="field"><label>Budget utilisé (G)</label><input type="number" id="f_moisBudgetUtilise" value="0"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-gold" onclick="saveMonthlyReport()">Soumettre</button>
+    </div>
+  `);
+}
+
+async function saveMonthlyReport(){
+  const mois = document.getElementById('f_moisRapport').value;
+  if(!mois){ toast('Le mois est obligatoire.','err'); return; }
+  const ministereId = myMinistereId();
+  // Empêche les doublons pour le même mois
+  const existingSnap = await R('rapports').orderByChild('ministereId').equalTo(ministereId).once('value');
+  let doublon = false;
+  existingSnap.forEach(c=>{ const v=c.val(); if(v.type==='mensuel' && v.mois===mois) doublon = true; });
+  if(doublon){ toast('Un rapport mensuel existe déjà pour ce mois.','err'); return; }
+
+  const data = {
+    type: 'mensuel', mois, ministereId,
+    nom: 'Rapport mensuel — ' + moisLabelFr(mois),
+    date: new Date().toISOString().slice(0,10),
+    resume: document.getElementById('f_moisResume').value.trim(),
+    resultats: document.getElementById('f_moisResultats').value.trim(),
+    difficultes: document.getElementById('f_moisDifficultes').value.trim(),
+    recommandations: document.getElementById('f_moisRecommandations').value.trim(),
+    entrees: document.getElementById('f_moisEntrees').value,
+    sorties: document.getElementById('f_moisSorties').value,
+    budgetUtilise: document.getElementById('f_moisBudgetUtilise').value,
+    statut: 'soumis', soumisPar: currentProfile.nom, createdAt: Date.now()
+  };
+  await R('rapports').push(data);
+  // Efface le flag d'alerte pour ce mois puisqu'il vient d'être soumis
+  await R('ministeres/'+ministereId).update({['alerteMensuelle_'+mois]: null});
+  logAction('Rapport mensuel soumis', moisLabelFr(mois));
+  queueWhatsApp('Pasteur', '', `Rapport mensuel de ${currentProfile.nom} soumis pour ${moisLabelFr(mois)}. En attente d'approbation sur PAEDS.`, 'rapport_mensuel');
+  toast('Rapport mensuel soumis.','ok');
+  closeModal();
+  render_rapports();
 }
 
 async function openReportDetail(id){
@@ -1337,20 +1635,62 @@ async function decideReport(id, decision){
   render_rapports();
 }
 /* ====================== MEMBRES & COMITÉS ====================== */
+let _selectedMembresMinistereId = null;
 async function render_membres(){
   const el = document.getElementById('contentArea');
   el.innerHTML = '<div class="empty-state"><p>Chargement…</p></div>';
-  const snap = await R('membres').once('value');
-  let list = []; snap.forEach(c=>list.push({id:c.key,...c.val()}));
-  if(!canSeeAll()) list = list.filter(m=>m.ministereId===myMinistereId());
-  const membres = list.filter(m=>m.categorie==='membre');
-  const comite = list.filter(m=>m.categorie==='comite');
+  const [membresSnap, minSnap] = await Promise.all([R('membres').once('value'), canSeeAll() ? R('ministeres').once('value') : Promise.resolve(null)]);
+  let list = []; membresSnap.forEach(c=>list.push({id:c.key,...c.val()}));
   window._membresCache = list;
 
-  el.innerHTML = `
-    <div style="display:flex;justify-content:flex-end;gap:10px;margin-bottom:16px;">
-      ${isResponsable() || isAdmin() ? `<button class="btn btn-ghost" onclick="openMemberForm('comite')">+ Membre du comité</button>
-      <button class="btn btn-gold" onclick="openMemberForm('membre')">+ Membre</button>` : ''}
+  if(canSeeAll()){
+    let ministeresList = []; minSnap.forEach(c=>ministeresList.push({id:c.key,...c.val()}));
+    ministeresList.sort((a,b)=>(a.nom||'').localeCompare(b.nom||''));
+    window._membresMinisteresList = ministeresList;
+    if(!_selectedMembresMinistereId && ministeresList.length) _selectedMembresMinistereId = ministeresList[0].id;
+
+    if(!ministeresList.length){
+      el.innerHTML = `<div class="empty-state"><div class="ic">⛪</div><p>Aucun ministère créé pour le moment. Crée d'abord un ministère pour pouvoir y enregistrer des membres.</p></div>`;
+      return;
+    }
+
+    el.innerHTML = `
+      <div class="panel" style="margin-bottom:16px;">
+        <div class="panel-head"><h3>Choisir un ministère</h3></div>
+        <div class="tag-row" id="membresMinistereRow">
+          ${ministeresList.map(m=>`<span class="tag-filter ${m.id===_selectedMembresMinistereId?'active':''}" onclick="selectMembresMinistere('${m.id}')">${esc(m.nom)}</span>`).join('')}
+        </div>
+      </div>
+      <div id="membresContentWrap"></div>
+    `;
+    renderMembresContent(list.filter(m=>m.ministereId===_selectedMembresMinistereId), _selectedMembresMinistereId);
+  } else {
+    list = list.filter(m=>m.ministereId===myMinistereId());
+    el.innerHTML = `<div id="membresContentWrap"></div>`;
+    renderMembresContent(list, myMinistereId());
+  }
+}
+
+function selectMembresMinistere(id){
+  _selectedMembresMinistereId = id;
+  document.querySelectorAll('#membresMinistereRow .tag-filter').forEach(t=>t.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+  renderMembresContent((window._membresCache||[]).filter(m=>m.ministereId===id), id);
+}
+
+function renderMembresContent(list, ministereId){
+  const wrap = document.getElementById('membresContentWrap');
+  const membres = list.filter(m=>m.categorie==='membre');
+  const comite = list.filter(m=>m.categorie==='comite');
+  const ministereNom = canSeeAll() ? ministryLabel(ministereId) : '';
+
+  wrap.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
+      ${canSeeAll() ? `<div style="font-size:13px;color:var(--ink-dim);">Membres de : <b style="color:var(--gold-bright);">${esc(ministereNom)}</b></div>` : '<div></div>'}
+      <div style="display:flex;gap:10px;">
+        <button class="btn btn-ghost" onclick="openMemberForm('comite')">+ Membre du comité</button>
+        <button class="btn btn-gold" onclick="openMemberForm('membre')">+ Membre</button>
+      </div>
     </div>
     <div class="panel">
       <div class="panel-head"><h3>Comité (${comite.length})</h3></div>
@@ -1439,7 +1779,9 @@ async function saveMember(categorie, existingId){
   if(existingId){
     await R('membres/'+existingId).update(data);
   } else {
-    data.ministereId = myMinistereId() || 'admin';
+    const targetMinistereId = canSeeAll() ? _selectedMembresMinistereId : myMinistereId();
+    if(!targetMinistereId){ toast('Sélectionne d\'abord un ministère.','err'); return; }
+    data.ministereId = targetMinistereId;
     data.createdAt = Date.now();
     await R('membres').push(data);
   }
@@ -1455,7 +1797,7 @@ async function render_calendrier(){
   el.innerHTML = '<div class="empty-state"><p>Chargement…</p></div>';
   const snap = await R('activites').once('value');
   let list = []; snap.forEach(c=>list.push({id:c.key,...c.val()}));
-  if(!canSeeAll()) list = list.filter(a=>a.ministereId===myMinistereId());
+  if(!canSeeAll()) list = list.filter(a=>a.ministereId===myMinistereId() || a.ministereId==='general');
   window._calActivites = list;
   renderCalendarGrid();
 }
