@@ -262,6 +262,9 @@ hr.sep{border:none;border-top:1px solid var(--navy-border);margin:16px 0;}
       <input type="password" id="loginPassword" placeholder="••••••••" autocomplete="current-password">
     </div>
     <button class="btn btn-gold btn-block" id="loginBtn" onclick="doLogin()">Se connecter</button>
+    <div style="text-align:center;margin-top:12px;">
+      <span onclick="openForgotPassword()" style="color:var(--gold-bright);font-size:12.5px;cursor:pointer;text-decoration:underline;">Mot de passe oublié ?</span>
+    </div>
     <div class="auth-foot">Accès réservé à l'administration, au pasteur et aux responsables de ministère.</div>
   </div>
 </div>
@@ -276,7 +279,7 @@ hr.sep{border:none;border-top:1px solid var(--navy-border);margin:16px 0;}
     </div>
     <div class="nav-group" id="navGroup"></div>
     <div class="sidebar-foot">
-      <div class="user-chip">
+      <div class="user-chip" onclick="openMyProfile()" style="cursor:pointer;">
         <div class="user-avatar" id="userAvatar">--</div>
         <div class="user-meta"><b id="userName">—</b><span id="userRole">—</span></div>
       </div>
@@ -535,6 +538,36 @@ function doLogout(){
   auth.signOut();
 }
 
+function openForgotPassword(){
+  openModal(`
+    <div class="modal-head"><h3>Mot de passe oublié</h3><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <p style="color:var(--ink-dim);font-size:13.5px;">Entre l'adresse email de ton compte PAEDS. Un lien de réinitialisation te sera envoyé pour choisir un nouveau mot de passe.</p>
+      <div class="field" style="margin-top:14px;"><label>Email</label><input type="email" id="f_forgotEmail" placeholder="nom@eglisesalem.org"></div>
+      <div id="forgotMsg" style="display:none;font-size:12.5px;margin-top:8px;"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-gold" onclick="submitForgotPassword()">Envoyer le lien</button>
+    </div>
+  `);
+}
+async function submitForgotPassword(){
+  const email = document.getElementById('f_forgotEmail').value.trim();
+  const msgEl = document.getElementById('forgotMsg');
+  if(!email){ toast('Entre ton email.','err'); return; }
+  try{
+    await auth.sendPasswordResetEmail(email);
+    msgEl.style.display='block';
+    msgEl.style.color='var(--ok)';
+    msgEl.textContent = 'Lien envoyé ! Vérifie ta boîte email (et les indésirables/spam).';
+  }catch(e){
+    msgEl.style.display='block';
+    msgEl.style.color='var(--danger)';
+    msgEl.textContent = e.code==='auth/user-not-found' ? "Aucun compte avec cet email." : "Erreur : "+e.message;
+  }
+}
+
 /* ====================== SIDEBAR / NAV ====================== */
 function toggleSidebar(open){
   document.getElementById('sidebar').classList.toggle('open',open);
@@ -606,6 +639,63 @@ function initAppShell(){
   checkMonthlyReports();
 }
 function roleLabel(r){ return {admin:'Administrateur', pasteur:'Pasteur', responsable:'Responsable de ministère'}[r] || r; }
+
+/* ====================== MON PROFIL ====================== */
+function openMyProfile(){
+  openModal(`
+    <div class="modal-head"><h3>Mon profil</h3><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Nom complet</label><input id="f_myNom" value="${esc(currentProfile.nom||'')}"></div>
+      <div class="field"><label>Email</label><input value="${esc(currentUser.email||'')}" readonly style="opacity:.6;"></div>
+      <button class="btn btn-ghost btn-block" onclick="saveMyName()" style="margin-top:6px;">Enregistrer le nom</button>
+      <hr class="sep">
+      <p style="color:var(--ink-dim);font-size:13px;font-weight:600;margin-bottom:10px;">Changer mon mot de passe</p>
+      <div class="field"><label>Mot de passe actuel</label><input type="password" id="f_myOldPwd" autocomplete="current-password"></div>
+      <div class="field"><label>Nouveau mot de passe</label><input type="password" id="f_myNewPwd" autocomplete="new-password"></div>
+      <div class="field"><label>Confirmer le nouveau mot de passe</label><input type="password" id="f_myNewPwd2" autocomplete="new-password"></div>
+      <div id="myPwdMsg" style="display:none;font-size:12.5px;margin-top:6px;"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Fermer</button>
+      <button class="btn btn-gold" onclick="changeMyPassword()">Changer le mot de passe</button>
+    </div>
+  `);
+}
+async function saveMyName(){
+  const nom = document.getElementById('f_myNom').value.trim();
+  if(!nom){ toast('Le nom est obligatoire.','err'); return; }
+  await R('users/'+currentUser.uid).update({nom});
+  currentProfile.nom = nom;
+  document.getElementById('userName').textContent = nom;
+  document.getElementById('userAvatar').textContent = initials(nom);
+  toast('Nom mis à jour.','ok');
+}
+async function changeMyPassword(){
+  const oldPwd = document.getElementById('f_myOldPwd').value;
+  const newPwd = document.getElementById('f_myNewPwd').value;
+  const newPwd2 = document.getElementById('f_myNewPwd2').value;
+  const msgEl = document.getElementById('myPwdMsg');
+  msgEl.style.display = 'none';
+  if(!oldPwd || !newPwd || !newPwd2){ toast('Remplis tous les champs de mot de passe.','err'); return; }
+  if(newPwd !== newPwd2){ toast('Les deux nouveaux mots de passe ne correspondent pas.','err'); return; }
+  if(newPwd.length < 6){ toast('Le nouveau mot de passe doit faire au moins 6 caractères.','err'); return; }
+  try{
+    const credential = firebase.auth.EmailAuthProvider.credential(currentUser.email, oldPwd);
+    await currentUser.reauthenticateWithCredential(credential);
+    await currentUser.updatePassword(newPwd);
+    logAction('Changement de mot de passe personnel', currentUser.email);
+    msgEl.style.display = 'block';
+    msgEl.style.color = 'var(--ok)';
+    msgEl.textContent = 'Mot de passe changé avec succès.';
+    document.getElementById('f_myOldPwd').value = '';
+    document.getElementById('f_myNewPwd').value = '';
+    document.getElementById('f_myNewPwd2').value = '';
+  }catch(e){
+    msgEl.style.display = 'block';
+    msgEl.style.color = 'var(--danger)';
+    msgEl.textContent = e.code==='auth/wrong-password' ? 'Mot de passe actuel incorrect.' : 'Erreur : '+e.message;
+  }
+}
 
 function buildNav(){
   const cfg = NAV_CONFIG[currentProfile.role] || NAV_CONFIG.responsable;
@@ -941,14 +1031,48 @@ async function openMinistryDetail(id){
       ${m.objectifs?`<p style="color:var(--ink-dim);font-size:13px;"><b style="color:var(--ink);">Objectifs :</b> ${esc(m.objectifs)}</p>`:''}
       ${m.verset?`<p style="color:var(--gold-bright);font-size:13px;font-style:italic;">"${esc(m.verset)}"</p>`:''}
     </div>
-    <div class="modal-foot">
+    <div class="modal-foot" style="flex-wrap:wrap;">
       ${isAdmin()?`
         <button class="btn btn-ghost" onclick="sendPasswordReset('${m.email}', '${esc(m.responsable||m.nom).replace(/'/g,"&#39;")}')">🔑 Changer le mot de passe</button>
-        <button class="btn btn-danger" onclick="suspendMinistry('${m.id}','${m.statut||'actif'}')">${m.statut==='suspendu'?'Réactiver':'Suspendre'}</button>
+        <button class="btn btn-ghost" onclick="suspendMinistry('${m.id}','${m.statut||'actif'}')">${m.statut==='suspendu'?'Réactiver':'Suspendre'}</button>
         <button class="btn btn-gold" onclick="closeModal();openMinistryForm(${JSON.stringify(m).replace(/"/g,'&quot;')})">Modifier</button>
+        <button class="btn btn-danger" onclick='confirmDeleteMinistry(${JSON.stringify(m).replace(/'/g,"&#39;")})'>🗑 Supprimer</button>
       `:''}
     </div>
   `);
+}
+
+function confirmDeleteMinistry(m){
+  openModal(`
+    <div class="modal-head"><h3>Supprimer ce ministère ?</h3><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <p style="color:var(--ink-dim);font-size:13.5px;">Tu es sur le point de supprimer définitivement <b style="color:var(--ink);">${esc(m.nom)}</b>.</p>
+      <div class="panel" style="background:rgba(224,88,79,.08);border-color:rgba(224,88,79,.35);margin-top:12px;">
+        <p style="color:var(--ink-dim);font-size:12.5px;margin:0;">• Le ministère disparaîtra de la liste et le compte du responsable (${esc(m.email||'—')}) perdra immédiatement l'accès à PAEDS.</p>
+        <p style="color:var(--ink-dim);font-size:12.5px;margin:8px 0 0;">• L'historique (activités, rapports, financements déjà enregistrés) est conservé pour les archives et n'est pas effacé.</p>
+        <p style="color:var(--ink-dim);font-size:12.5px;margin:8px 0 0;">• Cette action est irréversible pour la fiche du ministère elle-même.</p>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-danger" onclick="deleteMinistry('${m.id}')">Oui, supprimer définitivement</button>
+    </div>
+  `);
+}
+async function deleteMinistry(id){
+  try{
+    const usersSnap = await R('users').orderByChild('ministereId').equalTo(id).once('value');
+    const removals = [];
+    usersSnap.forEach(c=> removals.push(c.ref.remove()));
+    await Promise.all(removals);
+    await R('ministeres/'+id).remove();
+    logAction('Suppression ministère', id);
+    toast('Ministère supprimé.','ok');
+    closeModal();
+    render_ministeres();
+  }catch(e){
+    toast('Erreur lors de la suppression : '+e.message,'err');
+  }
 }
 
 /* Firebase ne permet pas à un administrateur de définir directement le mot de passe d'un
@@ -1016,6 +1140,7 @@ async function render_comptes(){
           <td><span class="badge badge-gold">${u.role==='admin'?'Administrateur':'Pasteur'}</span></td>
           <td>${statutBadge(u.statut||'actif')}</td>
           <td style="white-space:nowrap;">
+            <button class="btn btn-ghost btn-sm" onclick='openEditAccountForm(${JSON.stringify(u).replace(/'/g,"&#39;")})'>✏️</button>
             ${u.email?`<button class="btn btn-ghost btn-sm" onclick="sendPasswordReset('${u.email}', '${esc(u.nom||'').replace(/'/g,"&#39;")}')">🔑 Mot de passe</button>`:''}
             <button class="btn btn-ghost btn-sm" onclick="suspendAccount('${u.id}','${u.statut||'actif'}')">${u.statut==='suspendu'?'Réactiver':'Suspendre'}</button>
           </td>
@@ -1088,6 +1213,30 @@ async function suspendAccount(uid, currentStatut){
   await R('users/'+uid).update({statut:newStatut});
   logAction(newStatut==='suspendu'?'Suspension compte':'Réactivation compte', uid);
   toast(newStatut==='suspendu'?'Compte suspendu.':'Compte réactivé.','ok');
+  render_comptes();
+}
+
+function openEditAccountForm(u){
+  openModal(`
+    <div class="modal-head"><h3>Modifier le compte</h3><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Nom complet</label><input id="f_editAccNom" value="${esc(u.nom||'')}"></div>
+      <div class="field"><label>Email</label><input value="${esc(u.email||'')}" readonly style="opacity:.6;"></div>
+      <div class="helper">L'email de connexion ne peut pas être modifié ici (il est lié au compte d'authentification).</div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-gold" onclick="saveEditAccount('${u.id}')">Enregistrer</button>
+    </div>
+  `);
+}
+async function saveEditAccount(uid){
+  const nom = document.getElementById('f_editAccNom').value.trim();
+  if(!nom){ toast('Le nom est obligatoire.','err'); return; }
+  await R('users/'+uid).update({nom});
+  logAction('Modification compte', nom);
+  toast('Compte mis à jour.','ok');
+  closeModal();
   render_comptes();
 }
 
@@ -1348,10 +1497,34 @@ async function render_financements(){
       <td>${statutBadge(f.statut)}</td>
       <td style="white-space:nowrap;">
         <button class="btn btn-ghost btn-sm" onclick="printFinancingMemo('${f.id}')">📄 Mémo</button>
+        ${f.statut==='en_attente' && (isAdmin() || f.ministereId===myMinistereId()) ? `<button class="btn btn-ghost btn-sm" onclick='openEditFinancingForm(${JSON.stringify(f).replace(/'/g,"&#39;")})'>✏️</button>` : ''}
         ${isPasteur() && f.statut==='en_attente' ? `<button class="btn btn-ghost btn-sm" onclick="decideFinancing('${f.id}','approuve')">✓</button><button class="btn btn-ghost btn-sm" onclick="decideFinancing('${f.id}','refuse')">✗</button>` : ''}
       </td>
     </tr>`).join('') : `<tr><td colspan="6"><div class="empty-state"><div class="ic">💰</div><p>Aucune demande de financement.</p></div></td></tr>`}
   </tbody></table></div></div>`;
+}
+
+function openEditFinancingForm(f){
+  openModal(`
+    <div class="modal-head"><h3>Modifier la demande</h3><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Montant demandé (G)</label><input type="number" id="f_editFinMontant" value="${f.montant||''}"></div>
+      <div class="field"><label>Motif</label><textarea id="f_editFinMotif">${esc(f.motif||'')}</textarea></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-gold" onclick="saveEditFinancing('${f.id}')">Enregistrer</button>
+    </div>
+  `);
+}
+async function saveEditFinancing(id){
+  const montant = document.getElementById('f_editFinMontant').value;
+  const motif = document.getElementById('f_editFinMotif').value.trim();
+  await R('financements/'+id).update({montant, motif});
+  logAction('Modification demande de financement', id);
+  toast('Demande mise à jour.','ok');
+  closeModal();
+  render_financements();
 }
 
 async function decideFinancing(id, decision){
@@ -1611,6 +1784,7 @@ async function openReportDetail(id){
       </tbody></table></div>`:''}
     </div>
     <div class="modal-foot" style="flex-wrap:wrap;">
+      ${(r.statut==='soumis' || r.statut==='retourne') && (isAdmin() || r.ministereId===myMinistereId()) ? `<button class="btn btn-ghost btn-sm" onclick='closeModal();openEditReportForm(${JSON.stringify(r).replace(/'/g,"&#39;")})'>✏️ Modifier</button>` : ''}
       ${isPasteur() && r.statut==='soumis' ? `
         <button class="btn btn-ghost btn-sm" onclick="decideReport('${r.id}','retourne')">Retourner</button>
         <button class="btn btn-danger btn-sm" onclick="decideReport('${r.id}','refuse')">Refuser</button>
@@ -1620,6 +1794,44 @@ async function openReportDetail(id){
       <button class="btn btn-ghost btn-sm" onclick="closeModal()">Fermer</button>
     </div>
   `);
+}
+
+function openEditReportForm(r){
+  openModal(`
+    <div class="modal-head"><h3>Modifier le rapport</h3><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Résumé</label><textarea id="f_editResume">${esc(r.resume||'')}</textarea></div>
+      <div class="field"><label>Résultats</label><textarea id="f_editResultats">${esc(r.resultats||'')}</textarea></div>
+      <div class="field"><label>Difficultés</label><textarea id="f_editDifficultes">${esc(r.difficultes||'')}</textarea></div>
+      <div class="field"><label>Recommandations</label><textarea id="f_editRecommandations">${esc(r.recommandations||'')}</textarea></div>
+      <div class="grid2">
+        <div class="field"><label>Budget utilisé (G)</label><input type="number" id="f_editBudgetUtilise" value="${r.budgetUtilise||''}"></div>
+        <div class="field"><label>Entrées (G)</label><input type="number" id="f_editEntrees" value="${r.entrees||0}"></div>
+      </div>
+      <div class="field"><label>Sorties (G)</label><input type="number" id="f_editSorties" value="${r.sorties||0}"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-gold" onclick="saveEditReport('${r.id}')">Enregistrer</button>
+    </div>
+  `);
+}
+async function saveEditReport(id){
+  const data = {
+    resume: document.getElementById('f_editResume').value.trim(),
+    resultats: document.getElementById('f_editResultats').value.trim(),
+    difficultes: document.getElementById('f_editDifficultes').value.trim(),
+    recommandations: document.getElementById('f_editRecommandations').value.trim(),
+    budgetUtilise: document.getElementById('f_editBudgetUtilise').value,
+    entrees: document.getElementById('f_editEntrees').value,
+    sorties: document.getElementById('f_editSorties').value,
+    statut: 'soumis' // repasse en attente si le pasteur l'avait retourné
+  };
+  await R('rapports/'+id).update(data);
+  logAction('Modification rapport', id);
+  toast('Rapport mis à jour.','ok');
+  closeModal();
+  render_rapports();
 }
 async function decideReport(id, decision){
   await R('rapports/'+id).update({statut:decision, decisionPar:currentProfile.nom, decisionDate:Date.now()});
@@ -1845,8 +2057,8 @@ async function render_publications(){
 }
 function publicationCardHtml(p){
   const vu = p.vuPar && p.vuPar[currentUser.uid];
-  return `<div class="panel" onclick="markPublicationSeen('${p.id}')" style="cursor:pointer;">
-    <div style="display:flex;justify-content:space-between;align-items:start;gap:10px;">
+  return `<div class="panel">
+    <div style="display:flex;justify-content:space-between;align-items:start;gap:10px;cursor:pointer;" onclick="markPublicationSeen('${p.id}')">
       <div>
         <span class="badge badge-gold">${esc(p.type||'Communiqué')}</span>
         <h3 style="margin:8px 0 4px;font-size:15.5px;">${esc(p.titre)}</h3>
@@ -1855,32 +2067,42 @@ function publicationCardHtml(p){
       ${!vu?'<span class="badge badge-warn">Nouveau</span>':''}
     </div>
     <p style="color:var(--ink-dim);font-size:13px;margin-top:10px;">${esc(p.contenu||'')}</p>
+    ${(isAdmin()||isPasteur())?`<div style="margin-top:10px;"><button class="btn btn-ghost btn-sm" onclick='openPublicationForm(${JSON.stringify(p).replace(/'/g,"&#39;")})'>✏️ Modifier</button></div>`:''}
   </div>`;
 }
-function openPublicationForm(){
+function openPublicationForm(existing){
+  const p = existing || {};
   openModal(`
-    <div class="modal-head"><h3>Nouvelle publication</h3><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-head"><h3>${existing?'Modifier la':'Nouvelle'} publication</h3><button class="modal-close" onclick="closeModal()">×</button></div>
     <div class="modal-body">
-      <div class="field"><label>Titre</label><input id="f_pubTitre"></div>
-      <div class="field"><label>Type</label><select id="f_pubType">${['Décision','Communiqué','Calendrier','Ordre du jour','Document','Rapport','Note pastorale'].map(t=>`<option>${t}</option>`).join('')}</select></div>
-      <div class="field"><label>Contenu</label><textarea id="f_pubContenu" style="min-height:120px;"></textarea></div>
+      <div class="field"><label>Titre</label><input id="f_pubTitre" value="${esc(p.titre||'')}"></div>
+      <div class="field"><label>Type</label><select id="f_pubType">${['Décision','Communiqué','Calendrier','Ordre du jour','Document','Rapport','Note pastorale'].map(t=>`<option ${p.type===t?'selected':''}>${t}</option>`).join('')}</select></div>
+      <div class="field"><label>Contenu</label><textarea id="f_pubContenu" style="min-height:120px;">${esc(p.contenu||'')}</textarea></div>
     </div>
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
-      <button class="btn btn-gold" onclick="savePublication()">Publier</button>
+      <button class="btn btn-gold" onclick="savePublication(${existing?`'${p.id}'`:'null'})">${existing?'Enregistrer':'Publier'}</button>
     </div>
   `);
 }
-async function savePublication(){
+async function savePublication(existingId){
   const titre = document.getElementById('f_pubTitre').value.trim();
   if(!titre){ toast('Le titre est obligatoire.','err'); return; }
-  await R('publications').push({
-    titre, type: document.getElementById('f_pubType').value, contenu: document.getElementById('f_pubContenu').value.trim(),
-    auteur: currentProfile.nom, date: new Date().toISOString().slice(0,10), createdAt: Date.now(), vuPar: {}
-  });
-  logAction('Publication', titre);
-  notifyAllMinisteres(`Nouvelle publication disponible sur PAEDS : "${titre}". Veuillez vous connecter pour la consulter.`, 'publication');
-  toast('Publication envoyée à tous les responsables.','ok');
+  const type = document.getElementById('f_pubType').value;
+  const contenu = document.getElementById('f_pubContenu').value.trim();
+  if(existingId){
+    await R('publications/'+existingId).update({titre, type, contenu});
+    logAction('Modification publication', titre);
+    toast('Publication mise à jour.','ok');
+  } else {
+    await R('publications').push({
+      titre, type, contenu,
+      auteur: currentProfile.nom, date: new Date().toISOString().slice(0,10), createdAt: Date.now(), vuPar: {}
+    });
+    logAction('Publication', titre);
+    notifyAllMinisteres(`Nouvelle publication disponible sur PAEDS : "${titre}". Veuillez vous connecter pour la consulter.`, 'publication');
+    toast('Publication envoyée à tous les responsables.','ok');
+  }
   closeModal();
   render_publications();
 }
@@ -1923,38 +2145,48 @@ function meetingCardHtml(m){
       <button class="btn ${myStatus==='Absent'?'btn-gold':'btn-ghost'} btn-sm" onclick="confirmMeeting('${m.id}','Absent')">Absent</button>
       <button class="btn ${myStatus==='Excusé'?'btn-gold':'btn-ghost'} btn-sm" onclick="confirmMeeting('${m.id}','Excusé')">Excusé</button>
     </div>`:''}
+    ${(isAdmin()||isPasteur())?`<div style="margin-top:12px;"><button class="btn btn-ghost btn-sm" onclick='openMeetingForm(${JSON.stringify(m).replace(/'/g,"&#39;")})'>✏️ Modifier</button></div>`:''}
   </div>`;
 }
-function openMeetingForm(){
+function openMeetingForm(existing){
+  const m = existing || {};
   openModal(`
-    <div class="modal-head"><h3>Nouvelle rencontre</h3><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-head"><h3>${existing?'Modifier la':'Nouvelle'} rencontre</h3><button class="modal-close" onclick="closeModal()">×</button></div>
     <div class="modal-body">
-      <div class="field"><label>Titre</label><input id="f_rTitre" placeholder="Ex: Réunion du Comité Exécutif"></div>
+      <div class="field"><label>Titre</label><input id="f_rTitre" placeholder="Ex: Réunion du Comité Exécutif" value="${esc(m.titre||'')}"></div>
       <div class="grid2">
-        <div class="field"><label>Date</label><input type="date" id="f_rDate"></div>
-        <div class="field"><label>Heure</label><input type="time" id="f_rHeure"></div>
+        <div class="field"><label>Date</label><input type="date" id="f_rDate" value="${m.date||''}"></div>
+        <div class="field"><label>Heure</label><input type="time" id="f_rHeure" value="${m.heure||''}"></div>
       </div>
-      <div class="field"><label>Lieu</label><input id="f_rLieu"></div>
-      <div class="field"><label>Objectif / Ordre du jour</label><textarea id="f_rObjectif"></textarea></div>
+      <div class="field"><label>Lieu</label><input id="f_rLieu" value="${esc(m.lieu||'')}"></div>
+      <div class="field"><label>Objectif / Ordre du jour</label><textarea id="f_rObjectif">${esc(m.objectif||'')}</textarea></div>
     </div>
     <div class="modal-foot">
       <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
-      <button class="btn btn-gold" onclick="saveMeeting()">Publier la rencontre</button>
+      <button class="btn btn-gold" onclick="saveMeeting(${existing?`'${m.id}'`:'null'})">${existing?'Enregistrer':'Publier la rencontre'}</button>
     </div>
   `);
 }
-async function saveMeeting(){
+async function saveMeeting(existingId){
   const titre = document.getElementById('f_rTitre').value.trim();
   if(!titre){ toast('Le titre est obligatoire.','err'); return; }
   const date = document.getElementById('f_rDate').value;
-  await R('rencontres').push({
+  const data = {
     titre, date, heure: document.getElementById('f_rHeure').value,
-    lieu: document.getElementById('f_rLieu').value.trim(), objectif: document.getElementById('f_rObjectif').value.trim(),
-    confirmations: {}, createdAt: Date.now()
-  });
-  logAction('Nouvelle rencontre', titre);
-  notifyAllMinisteres(`Nouvelle rencontre programmée : "${titre}" le ${fmtDate(date)}. Merci de confirmer votre présence sur PAEDS.`, 'rencontre');
-  toast('Rencontre publiée.','ok');
+    lieu: document.getElementById('f_rLieu').value.trim(), objectif: document.getElementById('f_rObjectif').value.trim()
+  };
+  if(existingId){
+    await R('rencontres/'+existingId).update(data);
+    logAction('Modification rencontre', titre);
+    toast('Rencontre mise à jour.','ok');
+  } else {
+    data.confirmations = {};
+    data.createdAt = Date.now();
+    await R('rencontres').push(data);
+    logAction('Nouvelle rencontre', titre);
+    notifyAllMinisteres(`Nouvelle rencontre programmée : "${titre}" le ${fmtDate(date)}. Merci de confirmer votre présence sur PAEDS.`, 'rencontre');
+    toast('Rencontre publiée.','ok');
+  }
   closeModal();
   render_rencontres();
 }
