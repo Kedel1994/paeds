@@ -579,6 +579,9 @@ const NAV_CONFIG = {
     {group:'Vue d\'ensemble', items:[
       {id:'dashboard', label:'Tableau de bord', icon:'◈'},
     ]},
+    {group:'Registre Officiel', items:[
+      {id:'registre', label:'Registre de l\'Église', icon:'📖'},
+    ]},
     {group:'Gestion', items:[
       {id:'ministeres', label:'Ministères', icon:'⛪'},
       {id:'comptes', label:'Comptes (Pasteur/Admin)', icon:'🔑'},
@@ -597,8 +600,19 @@ const NAV_CONFIG = {
       {id:'journal', label:'Journal d\'audit', icon:'🛡'},
     ]},
   ],
+  secretaire: [
+    {group:'Vue d\'ensemble', items:[
+      {id:'dashboard', label:'Tableau de bord', icon:'◈'},
+    ]},
+    {group:'Registre Officiel', items:[
+      {id:'registre', label:'Registre de l\'Église', icon:'📖'},
+    ]},
+  ],
   pasteur: [
     {group:'Vue d\'ensemble', items:[{id:'dashboard', label:'Tableau de bord', icon:'◈'}]},
+    {group:'Registre Officiel', items:[
+      {id:'registre', label:'Registre de l\'Église', icon:'📖'},
+    ]},
     {group:'Supervision', items:[
       {id:'activites', label:'Activités', icon:'📋'},
       {id:'financements', label:'Financements', icon:'💰'},
@@ -638,7 +652,7 @@ function initAppShell(){
   checkOverdueActivityReports();
   checkMonthlyReports();
 }
-function roleLabel(r){ return {admin:'Administrateur', pasteur:'Pasteur', responsable:'Responsable de ministère'}[r] || r; }
+function roleLabel(r){ return {admin:'Administrateur', pasteur:'Pasteur', responsable:'Responsable de ministère', secretaire:'Secrétaire Général'}[r] || r; }
 
 /* ====================== MON PROFIL ====================== */
 function openMyProfile(){
@@ -713,7 +727,7 @@ function navTo(view){
   const titles = {dashboard:'Tableau de bord', ministeres:'Gestion des ministères', membres:'Membres & Comités',
     activites:'Activités', financements:'Demandes de financement', rapports:'Rapports d\'activité',
     calendrier:'Calendrier annuel', publications:'Publications', rencontres:'Rencontres', journal:'Journal d\'audit',
-    notifications:'Notifications WhatsApp', comptes:'Comptes Pasteur / Administrateur'};
+    notifications:'Notifications WhatsApp', comptes:'Comptes Pasteur / Administrateur', registre:'Registre Officiel de l\'Église'};
   document.getElementById('viewTitle').textContent = titles[view] || view;
   const fn = window['render_'+view];
   if(typeof fn === 'function'){ fn(); } else { document.getElementById('contentArea').innerHTML = '<div class="empty-state"><div class="ic">⚒</div><p>Module en construction.</p></div>'; }
@@ -771,7 +785,10 @@ function watchNotifBadge(){
 function isAdmin(){ return currentProfile && currentProfile.role==='admin'; }
 function isPasteur(){ return currentProfile && currentProfile.role==='pasteur'; }
 function isResponsable(){ return currentProfile && currentProfile.role==='responsable'; }
+function isSecretaire(){ return currentProfile && currentProfile.role==='secretaire'; }
 function canSeeAll(){ return isAdmin() || isPasteur(); }
+function canManageRegistre(){ return isAdmin() || isSecretaire(); }
+function canViewRegistre(){ return isAdmin() || isSecretaire() || isPasteur(); }
 function myMinistereId(){ return currentProfile ? currentProfile.ministereId : null; }
 
 /* ====================== DASHBOARD ====================== */
@@ -1120,7 +1137,7 @@ async function render_comptes(){
   let list = [];
   try{
     const snap = await R('users').once('value');
-    snap.forEach(c=>{ const v=c.val(); if(v.role==='admin' || v.role==='pasteur') list.push({id:c.key,...v}); });
+    snap.forEach(c=>{ const v=c.val(); if(v.role==='admin' || v.role==='pasteur' || v.role==='secretaire') list.push({id:c.key,...v}); });
   }catch(e){
     el.innerHTML = `<div class="empty-state"><div class="ic">⚠️</div><p>Impossible de lister les comptes (règle de sécurité manquante sur paeds/users).<br>Voir DEPLOIEMENT.md pour la règle à ajouter.</p></div>`;
     return;
@@ -1137,7 +1154,7 @@ async function render_comptes(){
         ${list.map(u=>`<tr>
           <td><b style="color:var(--ink);">${esc(u.nom||'—')}</b></td>
           <td>${esc(u.email||'—')}</td>
-          <td><span class="badge badge-gold">${u.role==='admin'?'Administrateur':'Pasteur'}</span></td>
+          <td><span class="badge badge-gold">${roleLabel(u.role)}</span></td>
           <td>${statutBadge(u.statut||'actif')}</td>
           <td style="white-space:nowrap;">
             <button class="btn btn-ghost btn-sm" onclick='openEditAccountForm(${JSON.stringify(u).replace(/'/g,"&#39;")})'>✏️</button>
@@ -1158,6 +1175,7 @@ function openAccountForm(){
       <div class="field"><label>Email (= identifiant de connexion)</label><input type="email" id="f_accEmail" placeholder="pasteur@eglisesalem.org"></div>
       <div class="field"><label>Rôle</label><select id="f_accRole">
         <option value="pasteur">Pasteur</option>
+        <option value="secretaire">Secrétaire Général</option>
         <option value="admin">Administrateur</option>
       </select></div>
       <div class="helper">Un mot de passe temporaire sera généré automatiquement. Tu pourras le communiquer à la personne concernée.</div>
@@ -1188,7 +1206,7 @@ async function saveAccount(){
     openModal(`
       <div class="modal-head"><h3>✅ Compte créé</h3><button class="modal-close" onclick="closeModal()">×</button></div>
       <div class="modal-body">
-        <p style="color:var(--ink-dim);font-size:13.5px;">Identifiants pour ${esc(nom)} (${role==='admin'?'Administrateur':'Pasteur'}) :</p>
+        <p style="color:var(--ink-dim);font-size:13.5px;">Identifiants pour ${esc(nom)} (${roleLabel(role)}) :</p>
         <div class="panel" style="margin-top:10px;">
           <div style="font-size:12px;color:var(--ink-faint);">Identifiant</div>
           <div style="font-size:15px;color:var(--gold-bright);margin-bottom:10px;">${esc(email)}</div>
@@ -2265,6 +2283,1029 @@ async function markNotifSent(id){
   await R('notifications_whatsapp/'+id).update({statut:'envoye', envoyePar: currentProfile.nom, envoyeAt: Date.now()});
   toast('Marqué comme envoyé.','ok');
   render_notifications();
+}
+
+/* ====================== REGISTRE OFFICIEL DE L'ÉGLISE ====================== */
+const RG = (path) => R('registre/'+path);
+let _registreTab = 'accueil';
+const REGISTRE_TABS = [
+  {id:'accueil', label:'Tableau de bord'},
+  {id:'reunions', label:'Réunions'},
+  {id:'cultes', label:'Cultes'},
+  {id:'etudes', label:'Études bibliques'},
+  {id:'cene', label:'Sainte-Cène'},
+  {id:'membresB', label:'Membres baptisés'},
+  {id:'veillees', label:'Veillées de nuit'},
+  {id:'reveils', label:'Réveils'},
+  {id:'missions', label:'Missions & Évangélisation'},
+  {id:'archives', label:'Archives'},
+];
+
+async function render_registre(){
+  if(!canViewRegistre()){ document.getElementById('contentArea').innerHTML = '<div class="empty-state"><p>Accès réservé au Secrétaire Général, au Pasteur et à l\'Administrateur.</p></div>'; return; }
+  const el = document.getElementById('contentArea');
+  el.innerHTML = `
+    <div class="tag-row" id="registreTabRow" style="margin-bottom:18px;">
+      ${REGISTRE_TABS.map(t=>`<span class="tag-filter ${t.id===_registreTab?'active':''}" onclick="switchRegistreTab('${t.id}')">${t.label}</span>`).join('')}
+    </div>
+    <div id="registreTabContent"></div>
+  `;
+  renderRegistreTab();
+}
+function switchRegistreTab(tab){
+  _registreTab = tab;
+  document.querySelectorAll('#registreTabRow .tag-filter').forEach((t,i)=>t.classList.toggle('active', REGISTRE_TABS[i].id===tab));
+  renderRegistreTab();
+}
+function renderRegistreTab(){
+  const fn = window['renderRegistre_'+_registreTab];
+  if(typeof fn === 'function') fn();
+}
+
+/* ---------- Tableau de bord du Secrétaire ---------- */
+async function renderRegistre_accueil(){
+  const wrap = document.getElementById('registreTabContent');
+  wrap.innerHTML = '<div class="empty-state"><p>Chargement…</p></div>';
+  const [reunionsSnap, cultesSnap, cenesSnap, membresBSnap] = await Promise.all([
+    RG('reunions').once('value'), RG('cultes').once('value'), RG('saintesCenes').once('value'), RG('membresBaptises').once('value')
+  ]);
+  let reunions=[], cultes=[], cenes=[], membresB=[];
+  reunionsSnap.forEach(c=>reunions.push({id:c.key,...c.val()}));
+  cultesSnap.forEach(c=>cultes.push({id:c.key,...c.val()}));
+  cenesSnap.forEach(c=>cenes.push({id:c.key,...c.val()}));
+  membresBSnap.forEach(c=>membresB.push({id:c.key,...c.val()}));
+
+  const today = new Date().toISOString().slice(0,10);
+  const pvEnAttente = reunions.filter(r=>r.statutApprobation!=='approuve');
+  const prochainesReunions = reunions.filter(r=>r.date>=today).sort((a,b)=>(a.date||'').localeCompare(b.date||'')).slice(0,5);
+  const dernierCulte = cultes.sort((a,b)=>(b.date||'').localeCompare(a.date||''))[0];
+  const totalDimes = cultes.reduce((s,c)=>s+(Number(c.dimes)||0),0);
+  const totalOffrandes = cultes.reduce((s,c)=>s+(Number(c.offrandes)||0),0);
+
+  wrap.innerHTML = `
+    <div class="stat-grid">
+      <div class="stat-card"><span class="ic">👥</span><div class="num">${membresB.length}</div><div class="lbl">Membres baptisés</div></div>
+      <div class="stat-card"><span class="ic">📝</span><div class="num">${reunions.length}</div><div class="lbl">Réunions enregistrées</div></div>
+      <div class="stat-card"><span class="ic">⛪</span><div class="num">${cultes.length}</div><div class="lbl">Cultes enregistrés</div></div>
+      <div class="stat-card"><span class="ic">🍞</span><div class="num">${cenes.length}</div><div class="lbl">Saintes-Cènes</div></div>
+      <div class="stat-card"><span class="ic">📄</span><div class="num">${pvEnAttente.length}</div><div class="lbl">PV en attente d'approbation</div></div>
+      <div class="stat-card"><span class="ic">💰</span><div class="num">${fmtMoney(totalDimes+totalOffrandes)}</div><div class="lbl">Dîmes + offrandes cumulées</div></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h3>Prochaines réunions</h3></div>
+      ${prochainesReunions.length ? prochainesReunions.map(r=>`<div style="padding:8px 0;border-bottom:1px solid var(--navy-border);font-size:13px;color:var(--ink-dim);">${fmtDate(r.date)} — ${esc(r.type||'Réunion')} (${esc(r.lieu||'—')})</div>`).join('') : `<div class="empty-state"><p>Aucune réunion à venir programmée.</p></div>`}
+    </div>
+    ${dernierCulte ? `<div class="panel">
+      <div class="panel-head"><h3>Dernier culte enregistré</h3></div>
+      <p style="font-size:13px;color:var(--ink-dim);">${fmtDate(dernierCulte.date)} — ${esc(dernierCulte.typeCulte||'Culte')} · Prédicateur : ${esc(dernierCulte.predicateur||'—')}</p>
+      <p style="font-size:13px;color:var(--ink-dim);">Participants : ${Number(dernierCulte.nbHommes||0)+Number(dernierCulte.nbFemmes||0)+Number(dernierCulte.nbEnfants||0)} · Dîmes : ${fmtMoney(dernierCulte.dimes)} · Offrandes : ${fmtMoney(dernierCulte.offrandes)}</p>
+    </div>` : ''}
+  `;
+}
+
+/* ---------- Réunions des membres ---------- */
+const TYPES_REUNION = ['Réunion de comité', 'Réunion des membres', 'Réunion des diacres', 'Assemblée générale', 'Autre'];
+async function renderRegistre_reunions(){
+  const wrap = document.getElementById('registreTabContent');
+  wrap.innerHTML = '<div class="empty-state"><p>Chargement…</p></div>';
+  const snap = await RG('reunions').once('value');
+  let list = []; snap.forEach(c=>list.push({id:c.key,...c.val()}));
+  list.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+
+  wrap.innerHTML = `
+    <div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
+      ${canManageRegistre()?`<button class="btn btn-gold" onclick="openReunionForm()">+ Nouvelle réunion</button>`:''}
+    </div>
+    <div class="panel"><div class="table-wrap"><table><thead><tr>
+      <th>Type</th><th>Date</th><th>Lieu</th><th>Président</th><th>Statut PV</th><th></th>
+    </tr></thead><tbody>
+      ${list.length ? list.map(r=>`<tr style="cursor:pointer;" onclick="openReunionDetail('${r.id}')">
+        <td><b style="color:var(--ink);">${esc(r.type||'—')}</b></td>
+        <td>${fmtDate(r.date)}</td>
+        <td>${esc(r.lieu||'—')}</td>
+        <td>${esc(r.president||'—')}</td>
+        <td>${r.statutApprobation==='approuve'?'<span class="badge badge-ok">Approuvé</span>':'<span class="badge badge-warn">En attente</span>'}</td>
+        <td>›</td>
+      </tr>`).join('') : `<tr><td colspan="6"><div class="empty-state"><p>Aucune réunion enregistrée.</p></div></td></tr>`}
+    </tbody></table></div></div>
+  `;
+}
+
+function openReunionForm(existing){
+  const r = existing || {};
+  openModal(`
+    <div class="modal-head"><h3>${existing?'Modifier la':'Nouvelle'} réunion</h3><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="grid2">
+        <div class="field"><label>Type de réunion</label><select id="f_rnType">${TYPES_REUNION.map(t=>`<option ${r.type===t?'selected':''}>${t}</option>`).join('')}</select></div>
+        <div class="field"><label>Date</label><input type="date" id="f_rnDate" value="${r.date||''}"></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>Heure de début</label><input type="time" id="f_rnHeureDebut" value="${r.heureDebut||''}"></div>
+        <div class="field"><label>Heure de fin</label><input type="time" id="f_rnHeureFin" value="${r.heureFin||''}"></div>
+      </div>
+      <div class="field"><label>Lieu</label><input id="f_rnLieu" value="${esc(r.lieu||'')}"></div>
+      <div class="grid2">
+        <div class="field"><label>Président de séance</label><input id="f_rnPresident" value="${esc(r.president||'')}"></div>
+        <div class="field"><label>Secrétaire</label><input id="f_rnSecretaire" value="${esc(r.secretaire||currentProfile.nom||'')}"></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>Resp. méditation</label><input id="f_rnMeditation" value="${esc(r.respMeditation||'')}"></div>
+        <div class="field"><label>Resp. prière</label><input id="f_rnPriere" value="${esc(r.respPriere||'')}"></div>
+      </div>
+      <div class="field"><label>Resp. louange</label><input id="f_rnLouange" value="${esc(r.respLouange||'')}"></div>
+      <div class="field"><label>Objectif de la réunion</label><textarea id="f_rnObjectif">${esc(r.objectif||'')}</textarea></div>
+      <div class="field"><label>Ordre du jour (un point par ligne)</label><textarea id="f_rnOrdreJour" placeholder="1. ...\n2. ...">${esc((r.ordreJour||[]).join('\n'))}</textarea></div>
+      <div class="field"><label>Déroulement / discussions (résumé)</label><textarea id="f_rnDeroulement" style="min-height:90px;">${esc(r.deroulement||'')}</textarea></div>
+      <div class="field"><label>Questions des membres (une par ligne : Nom, Question, Réponse)</label><textarea id="f_rnQuestions" placeholder="Jean Pierre, Pourquoi..., Parce que...">${esc(r.questionsRaw||'')}</textarea></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-gold" onclick="saveReunion(${existing?`'${r.id}'`:'null'})">Enregistrer</button>
+    </div>
+  `);
+}
+async function saveReunion(existingId){
+  const data = {
+    type: document.getElementById('f_rnType').value,
+    date: document.getElementById('f_rnDate').value,
+    heureDebut: document.getElementById('f_rnHeureDebut').value,
+    heureFin: document.getElementById('f_rnHeureFin').value,
+    lieu: document.getElementById('f_rnLieu').value.trim(),
+    president: document.getElementById('f_rnPresident').value.trim(),
+    secretaire: document.getElementById('f_rnSecretaire').value.trim(),
+    respMeditation: document.getElementById('f_rnMeditation').value.trim(),
+    respPriere: document.getElementById('f_rnPriere').value.trim(),
+    respLouange: document.getElementById('f_rnLouange').value.trim(),
+    objectif: document.getElementById('f_rnObjectif').value.trim(),
+    ordreJour: document.getElementById('f_rnOrdreJour').value.split('\n').map(l=>l.trim()).filter(Boolean),
+    deroulement: document.getElementById('f_rnDeroulement').value.trim(),
+    questionsRaw: document.getElementById('f_rnQuestions').value.trim(),
+  };
+  if(!data.date){ toast('La date est obligatoire.','err'); return; }
+  if(existingId){
+    await RG('reunions/'+existingId).update(data);
+    logAction('Modification réunion', data.type);
+  } else {
+    data.statutApprobation = 'en_attente';
+    data.presences = {};
+    data.decisions = [];
+    data.createdAt = Date.now();
+    await RG('reunions').push(data);
+    logAction('Nouvelle réunion', data.type);
+    if(isPasteur()===false) queueWhatsApp('Pasteur','', `Nouvelle réunion enregistrée (${data.type}, ${fmtDate(data.date)}) — PV disponible sur PAEDS pour consultation.`, 'reunion');
+  }
+  toast('Réunion enregistrée.','ok');
+  closeModal();
+  renderRegistre_reunions();
+}
+
+async function openReunionDetail(id){
+  const [rSnap, membresBSnap] = await Promise.all([RG('reunions/'+id).once('value'), RG('membresBaptises').once('value')]);
+  const r = {id, ...rSnap.val()};
+  let membresB = []; membresBSnap.forEach(c=>membresB.push({id:c.key,...c.val()}));
+  const presences = r.presences || {};
+  const decisions = r.decisions || [];
+  const questions = (r.questionsRaw||'').split('\n').filter(Boolean).map(l=>{
+    const p = l.split(',').map(x=>x.trim());
+    return {nom:p[0]||'', question:p[1]||'', reponse:p[2]||''};
+  });
+  const stats = {present:0, absent:0, excuse:0, retard:0};
+  membresB.forEach(m=>{ const s = presences[m.id] || 'absent'; if(stats[s]!==undefined) stats[s]++; });
+
+  openModal(`
+    <div class="modal-head"><h3>${esc(r.type||'Réunion')} — ${fmtDate(r.date)}</h3><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div style="margin-bottom:10px;">${r.statutApprobation==='approuve'?'<span class="badge badge-ok">Approuvé par le Pasteur</span>':'<span class="badge badge-warn">En attente d\'approbation</span>'}</div>
+      <p style="font-size:13px;color:var(--ink-dim);"><b style="color:var(--ink);">Lieu :</b> ${esc(r.lieu||'—')} · <b style="color:var(--ink);">Horaire :</b> ${r.heureDebut||'—'} - ${r.heureFin||'—'}</p>
+      <p style="font-size:13px;color:var(--ink-dim);"><b style="color:var(--ink);">Président :</b> ${esc(r.president||'—')} · <b style="color:var(--ink);">Secrétaire :</b> ${esc(r.secretaire||'—')}</p>
+      ${r.objectif?`<p style="font-size:13px;color:var(--ink-dim);"><b style="color:var(--ink);">Objectif :</b> ${esc(r.objectif)}</p>`:''}
+      ${r.ordreJour&&r.ordreJour.length?`<hr class="sep"><p style="font-size:13px;color:var(--ink);font-weight:600;">Ordre du jour</p>${r.ordreJour.map((p,i)=>`<p style="font-size:12.5px;color:var(--ink-dim);">${i+1}. ${esc(p)}</p>`).join('')}`:''}
+      ${r.deroulement?`<hr class="sep"><p style="font-size:13px;color:var(--ink);font-weight:600;">Déroulement</p><p style="font-size:12.5px;color:var(--ink-dim);">${esc(r.deroulement)}</p>`:''}
+      <hr class="sep">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <p style="font-size:13px;color:var(--ink);font-weight:600;margin:0;">Présences (${stats.present} présents / ${membresB.length})</p>
+        ${canManageRegistre()?`<button class="btn btn-ghost btn-sm" onclick='openPresenceForm("reunions","${r.id}", ${JSON.stringify(presences).replace(/'/g,"&#39;")})'>Cocher présences</button>`:''}
+      </div>
+      <p style="font-size:12px;color:var(--ink-faint);">Présents : ${stats.present} · Absents : ${stats.absent} · Excusés : ${stats.excuse} · Retard : ${stats.retard} · Taux : ${membresB.length?Math.round(stats.present/membresB.length*100):0}%</p>
+      <hr class="sep">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <p style="font-size:13px;color:var(--ink);font-weight:600;margin:0;">Décisions (${decisions.length})</p>
+        ${canManageRegistre()?`<button class="btn btn-ghost btn-sm" onclick='openDecisionForm("${r.id}")'>+ Ajouter</button>`:''}
+      </div>
+      ${decisions.length ? decisions.map((d,i)=>`<div style="padding:8px 0;border-bottom:1px solid var(--navy-border);">
+        <p style="font-size:12.5px;color:var(--ink-dim);margin:0;">${esc(d.texte)}</p>
+        <p style="font-size:11.5px;color:var(--ink-faint);margin:4px 0 0;">Responsable : ${esc(d.responsable||'—')} · Échéance : ${fmtDate(d.echeance)} ${statutBadge(d.statut)}</p>
+      </div>`).join('') : `<p style="font-size:12.5px;color:var(--ink-faint);">Aucune décision enregistrée.</p>`}
+      ${questions.length?`<hr class="sep"><p style="font-size:13px;color:var(--ink);font-weight:600;">Questions des membres</p>
+      ${questions.map(q=>`<p style="font-size:12.5px;color:var(--ink-dim);"><b>${esc(q.nom)}</b> — ${esc(q.question)} → ${esc(q.reponse)}</p>`).join('')}`:''}
+    </div>
+    <div class="modal-foot" style="flex-wrap:wrap;">
+      ${canManageRegistre()?`<button class="btn btn-ghost btn-sm" onclick='closeModal();openReunionForm(${JSON.stringify(r).replace(/'/g,"&#39;")})'>✏️ Modifier</button>`:''}
+      <button class="btn btn-ghost btn-sm" onclick="printReunionPV('${r.id}')">🖨 Générer le PV</button>
+      ${isPasteur() && r.statutApprobation!=='approuve' ? `<button class="btn btn-gold btn-sm" onclick="approuverReunion('${r.id}')">Approuver le PV</button>` : ''}
+      <button class="btn btn-ghost btn-sm" onclick="closeModal()">Fermer</button>
+    </div>
+  `);
+}
+
+function openPresenceForm(type, id, presencesExistantes){
+  RG('membresBaptises').once('value').then(snap=>{
+    let membresB = []; snap.forEach(c=>membresB.push({id:c.key,...c.val()}));
+    openModal(`
+      <div class="modal-head"><h3>Cocher les présences</h3><button class="modal-close" onclick="closeModal()">×</button></div>
+      <div class="modal-body">
+        ${membresB.length ? membresB.map(m=>`
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--navy-border);">
+            <span style="font-size:13px;color:var(--ink);">${esc(m.prenom||'')} ${esc(m.nom||'')}</span>
+            <select id="pres_${m.id}" style="background:var(--navy-700);border:1px solid var(--navy-border);border-radius:8px;color:var(--ink);padding:5px 8px;font-size:12px;">
+              <option value="present" ${presencesExistantes[m.id]==='present'?'selected':''}>Présent</option>
+              <option value="absent" ${(!presencesExistantes[m.id]||presencesExistantes[m.id]==='absent')?'selected':''}>Absent</option>
+              <option value="excuse" ${presencesExistantes[m.id]==='excuse'?'selected':''}>Excusé</option>
+              <option value="retard" ${presencesExistantes[m.id]==='retard'?'selected':''}>Retard</option>
+            </select>
+          </div>
+        `).join('') : `<div class="empty-state"><p>Aucun membre baptisé enregistré. Ajoute d'abord des membres dans l'onglet "Membres baptisés".</p></div>`}
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+        <button class="btn btn-gold" onclick='savePresences("${type}","${id}", ${JSON.stringify(membresB.map(m=>m.id))})'>Enregistrer</button>
+      </div>
+    `);
+  });
+}
+async function savePresences(type, id, memberIds){
+  const presences = {};
+  memberIds.forEach(mid=>{ const el = document.getElementById('pres_'+mid); if(el) presences[mid] = el.value; });
+  await RG(type+'/'+id+'/presences').set(presences);
+  logAction('Présences enregistrées', type);
+  toast('Présences enregistrées.','ok');
+  closeModal();
+  if(type==='reunions') openReunionDetail(id); else openCeneDetail(id);
+}
+
+function openDecisionForm(reunionId){
+  openModal(`
+    <div class="modal-head"><h3>Nouvelle décision</h3><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Texte de la décision</label><textarea id="f_decTexte"></textarea></div>
+      <div class="grid2">
+        <div class="field"><label>Responsable d'exécution</label><input id="f_decResponsable"></div>
+        <div class="field"><label>Échéance</label><input type="date" id="f_decEcheance"></div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-gold" onclick="saveDecision('${reunionId}')">Ajouter</button>
+    </div>
+  `);
+}
+async function saveDecision(reunionId){
+  const texte = document.getElementById('f_decTexte').value.trim();
+  if(!texte){ toast('Le texte est obligatoire.','err'); return; }
+  const snap = await RG('reunions/'+reunionId+'/decisions').once('value');
+  const decisions = snap.val() || [];
+  decisions.push({
+    texte, responsable: document.getElementById('f_decResponsable').value.trim(),
+    echeance: document.getElementById('f_decEcheance').value, statut: 'a_realiser'
+  });
+  await RG('reunions/'+reunionId+'/decisions').set(decisions);
+  logAction('Nouvelle décision', texte);
+  toast('Décision ajoutée.','ok');
+  closeModal();
+  openReunionDetail(reunionId);
+}
+
+async function approuverReunion(id){
+  await RG('reunions/'+id).update({statutApprobation:'approuve', approuvePar: currentProfile.nom, approuveAt: Date.now()});
+  logAction('PV de réunion approuvé', id);
+  toast('PV approuvé.','ok');
+  closeModal();
+  renderRegistre_reunions();
+}
+
+async function printReunionPV(id){
+  const snap = await RG('reunions/'+id).once('value');
+  const r = snap.val();
+  const decisions = r.decisions || [];
+  const html = `
+    <div style="font-family:Georgia,serif;max-width:680px;margin:0 auto;">
+      <div style="text-align:center;border-bottom:2px solid #d4af37;padding-bottom:14px;margin-bottom:24px;">
+        <h2 style="margin:0;">Église de Dieu Salem de Jérémie</h2>
+        <div style="font-size:12px;color:#555;">Procès-verbal officiel — ${esc(r.type||'Réunion')}</div>
+      </div>
+      <p><b>Date :</b> ${fmtDate(r.date)} · <b>Lieu :</b> ${esc(r.lieu||'—')} · <b>Horaire :</b> ${r.heureDebut||'—'} - ${r.heureFin||'—'}</p>
+      <p><b>Président :</b> ${esc(r.president||'—')} · <b>Secrétaire :</b> ${esc(r.secretaire||'—')}</p>
+      ${r.objectif?`<p><b>Objectif :</b> ${esc(r.objectif)}</p>`:''}
+      <hr>
+      ${r.ordreJour&&r.ordreJour.length?`<p><b>Ordre du jour :</b></p><ol>${r.ordreJour.map(p=>`<li>${esc(p)}</li>`).join('')}</ol>`:''}
+      ${r.deroulement?`<p><b>Déroulement :</b><br>${esc(r.deroulement).replace(/\n/g,'<br>')}</p>`:''}
+      ${decisions.length?`<p><b>Décisions prises :</b></p><ul>${decisions.map(d=>`<li>${esc(d.texte)} — Responsable : ${esc(d.responsable||'—')}, échéance : ${fmtDate(d.echeance)}</li>`).join('')}</ul>`:''}
+      <br><br>
+      <p>Président : ______________________ &nbsp;&nbsp;&nbsp; Secrétaire : ______________________</p>
+    </div>
+  `;
+  document.getElementById('printArea').innerHTML = html;
+  window.print();
+}
+
+/* ---------- Membres baptisés (registre de référence) ---------- */
+const STATUTS_MEMBRE_B = ['actif','passif','suspendu','transfere','decede'];
+async function renderRegistre_membresB(){
+  const wrap = document.getElementById('registreTabContent');
+  wrap.innerHTML = '<div class="empty-state"><p>Chargement…</p></div>';
+  const snap = await RG('membresBaptises').once('value');
+  let list = []; snap.forEach(c=>list.push({id:c.key,...c.val()}));
+  list.sort((a,b)=>(a.nom||'').localeCompare(b.nom||''));
+  window._membresBCache = list;
+
+  wrap.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+      <input type="text" placeholder="Rechercher un membre…" oninput="filterMembresB(this.value)" style="background:var(--navy-800);border:1px solid var(--navy-border);border-radius:9px;padding:9px 12px;color:var(--ink);font-size:13px;width:200px;">
+      ${canManageRegistre()?`<button class="btn btn-gold" onclick="openMembreBForm()">+ Nouveau membre</button>`:''}
+    </div>
+    <div class="panel"><div class="table-wrap"><table><thead><tr>
+      <th>Nom</th><th>Sexe</th><th>Baptême</th><th>Ministère</th><th>Statut</th><th></th>
+    </tr></thead><tbody id="membresBTbody"></tbody></table></div></div>
+  `;
+  renderMembresBRows(list);
+}
+function renderMembresBRows(list){
+  const tbody = document.getElementById('membresBTbody');
+  tbody.innerHTML = list.length ? list.map(m=>`<tr>
+    <td><b style="color:var(--ink);">${esc(m.prenom||'')} ${esc(m.nom||'')}</b></td>
+    <td>${esc(m.sexe||'—')}</td>
+    <td>${fmtDate(m.dateBapteme)}</td>
+    <td>${esc(m.ministere||'—')}</td>
+    <td>${statutBadge(m.statut)}</td>
+    <td>${canManageRegistre()?`<button class="btn btn-ghost btn-sm" onclick='openMembreBForm(${JSON.stringify(m).replace(/'/g,"&#39;")})'>✏️</button>`:''}</td>
+  </tr>`).join('') : `<tr><td colspan="6"><div class="empty-state"><p>Aucun membre baptisé enregistré.</p></div></td></tr>`;
+}
+function filterMembresB(q){
+  const ql = q.toLowerCase();
+  const filtered = (window._membresBCache||[]).filter(m=>((m.nom||'')+' '+(m.prenom||'')).toLowerCase().includes(ql));
+  renderMembresBRows(filtered);
+}
+function openMembreBForm(existing){
+  const m = existing || {};
+  openModal(`
+    <div class="modal-head"><h3>${existing?'Modifier le':'Nouveau'} membre baptisé</h3><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="grid2">
+        <div class="field"><label>Prénom</label><input id="f_mbPrenom" value="${esc(m.prenom||'')}"></div>
+        <div class="field"><label>Nom</label><input id="f_mbNom" value="${esc(m.nom||'')}"></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>Sexe</label><select id="f_mbSexe"><option value="M" ${m.sexe==='M'?'selected':''}>Masculin</option><option value="F" ${m.sexe==='F'?'selected':''}>Féminin</option></select></div>
+        <div class="field"><label>Date de naissance</label><input type="date" id="f_mbDateNaissance" value="${m.dateNaissance||''}"></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>Adresse</label><input id="f_mbAdresse" value="${esc(m.adresse||'')}"></div>
+        <div class="field"><label>Téléphone</label><input id="f_mbTelephone" value="${esc(m.telephone||'')}"></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>Date de conversion</label><input type="date" id="f_mbDateConversion" value="${m.dateConversion||''}"></div>
+        <div class="field"><label>Date du baptême</label><input type="date" id="f_mbDateBapteme" value="${m.dateBapteme||''}"></div>
+      </div>
+      <div class="field"><label>Officiant</label><input id="f_mbOfficiant" value="${esc(m.officiant||'')}"></div>
+      <div class="grid2">
+        <div class="field"><label>Ministère</label><input id="f_mbMinistere" value="${esc(m.ministere||'')}"></div>
+        <div class="field"><label>Groupe</label><input id="f_mbGroupe" value="${esc(m.groupe||'')}"></div>
+      </div>
+      <div class="field"><label>Statut</label><select id="f_mbStatut">${STATUTS_MEMBRE_B.map(s=>`<option value="${s}" ${m.statut===s?'selected':''}>${s.charAt(0).toUpperCase()+s.slice(1)}</option>`).join('')}</select></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-gold" onclick="saveMembreB(${existing?`'${m.id}'`:'null'})">Enregistrer</button>
+    </div>
+  `);
+}
+async function saveMembreB(existingId){
+  const data = {
+    prenom: document.getElementById('f_mbPrenom').value.trim(),
+    nom: document.getElementById('f_mbNom').value.trim(),
+    sexe: document.getElementById('f_mbSexe').value,
+    dateNaissance: document.getElementById('f_mbDateNaissance').value,
+    adresse: document.getElementById('f_mbAdresse').value.trim(),
+    telephone: document.getElementById('f_mbTelephone').value.trim(),
+    dateConversion: document.getElementById('f_mbDateConversion').value,
+    dateBapteme: document.getElementById('f_mbDateBapteme').value,
+    officiant: document.getElementById('f_mbOfficiant').value.trim(),
+    ministere: document.getElementById('f_mbMinistere').value.trim(),
+    groupe: document.getElementById('f_mbGroupe').value.trim(),
+    statut: document.getElementById('f_mbStatut').value,
+  };
+  if(!data.nom){ toast('Le nom est obligatoire.','err'); return; }
+  if(existingId){
+    await RG('membresBaptises/'+existingId).update(data);
+    logAction('Modification membre baptisé', data.nom);
+  } else {
+    data.createdAt = Date.now();
+    await RG('membresBaptises').push(data);
+    logAction('Nouveau membre baptisé', data.nom);
+  }
+  toast('Enregistré.','ok');
+  closeModal();
+  renderRegistre_membresB();
+}
+
+/* ---------- Gestion des cultes ---------- */
+const TYPES_CULTE = ['Culte du dimanche matin', 'Culte du dimanche soir', 'Culte de prière', 'Culte spécial', 'Autre'];
+async function renderRegistre_cultes(){
+  const wrap = document.getElementById('registreTabContent');
+  wrap.innerHTML = '<div class="empty-state"><p>Chargement…</p></div>';
+  const snap = await RG('cultes').once('value');
+  let list = []; snap.forEach(c=>list.push({id:c.key,...c.val()}));
+  list.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+
+  wrap.innerHTML = `
+    <div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
+      ${canManageRegistre()?`<button class="btn btn-gold" onclick="openCulteForm()">+ Nouveau culte</button>`:''}
+    </div>
+    <div class="panel"><div class="table-wrap"><table><thead><tr>
+      <th>Type</th><th>Date</th><th>Prédicateur</th><th>Participants</th><th>Dîmes+Offrandes</th><th></th>
+    </tr></thead><tbody>
+      ${list.length ? list.map(c=>{
+        const total = Number(c.nbHommes||0)+Number(c.nbFemmes||0)+Number(c.nbEnfants||0);
+        return `<tr>
+        <td><b style="color:var(--ink);">${esc(c.typeCulte||'—')}</b></td>
+        <td>${fmtDate(c.date)}</td>
+        <td>${esc(c.predicateur||'—')}</td>
+        <td>${total}</td>
+        <td>${fmtMoney(Number(c.dimes||0)+Number(c.offrandes||0))}</td>
+        <td>${canManageRegistre()?`<button class="btn btn-ghost btn-sm" onclick='openCulteForm(${JSON.stringify(c).replace(/'/g,"&#39;")})'>✏️</button>`:''}</td>
+      </tr>`;}).join('') : `<tr><td colspan="6"><div class="empty-state"><p>Aucun culte enregistré.</p></div></td></tr>`}
+    </tbody></table></div></div>
+  `;
+}
+function openCulteForm(existing){
+  const c = existing || {};
+  openModal(`
+    <div class="modal-head"><h3>${existing?'Modifier le':'Nouveau'} culte</h3><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="grid2">
+        <div class="field"><label>Type de culte</label><select id="f_cuType">${TYPES_CULTE.map(t=>`<option ${c.typeCulte===t?'selected':''}>${t}</option>`).join('')}</select></div>
+        <div class="field"><label>Date</label><input type="date" id="f_cuDate" value="${c.date||''}"></div>
+      </div>
+      <div class="field"><label>Heure</label><input type="time" id="f_cuHeure" value="${c.heure||''}"></div>
+      <div class="grid2">
+        <div class="field"><label>Président</label><input id="f_cuPresident" value="${esc(c.president||'')}"></div>
+        <div class="field"><label>Resp. louange</label><input id="f_cuLouange" value="${esc(c.respLouange||'')}"></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>Resp. prière</label><input id="f_cuPriere" value="${esc(c.respPriere||'')}"></div>
+        <div class="field"><label>Lecteur biblique</label><input id="f_cuLecteur" value="${esc(c.lecteur||'')}"></div>
+      </div>
+      <div class="field"><label>Prédicateur</label><input id="f_cuPredicateur" value="${esc(c.predicateur||'')}"></div>
+      <div class="grid2">
+        <div class="field"><label>Sujet</label><input id="f_cuSujet" value="${esc(c.sujet||'')}"></div>
+        <div class="field"><label>Texte biblique</label><input id="f_cuTexte" value="${esc(c.texteBiblique||'')}"></div>
+      </div>
+      <div class="field"><label>Chorales participantes</label><input id="f_cuChorales" value="${esc(c.chorales||'')}"></div>
+      <div class="field"><label>Annonces</label><textarea id="f_cuAnnonces">${esc(c.annonces||'')}</textarea></div>
+      <div class="grid2">
+        <div class="field"><label>Nombre d'hommes</label><input type="number" id="f_cuHommes" value="${c.nbHommes||0}"></div>
+        <div class="field"><label>Nombre de femmes</label><input type="number" id="f_cuFemmes" value="${c.nbFemmes||0}"></div>
+      </div>
+      <div class="field"><label>Nombre d'enfants</label><input type="number" id="f_cuEnfants" value="${c.nbEnfants||0}"></div>
+      <div class="grid2">
+        <div class="field"><label>Dîmes (G)</label><input type="number" id="f_cuDimes" value="${c.dimes||0}"></div>
+        <div class="field"><label>Offrandes (G)</label><input type="number" id="f_cuOffrandes" value="${c.offrandes||0}"></div>
+      </div>
+      <div class="field"><label>Dons spéciaux (G)</label><input type="number" id="f_cuDons" value="${c.donsSpeciaux||0}"></div>
+      <div class="field"><label>Observations</label><textarea id="f_cuObservations">${esc(c.observations||'')}</textarea></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-gold" onclick="saveCulte(${existing?`'${c.id}'`:'null'})">Enregistrer</button>
+    </div>
+  `);
+}
+async function saveCulte(existingId){
+  const data = {
+    typeCulte: document.getElementById('f_cuType').value,
+    date: document.getElementById('f_cuDate').value,
+    heure: document.getElementById('f_cuHeure').value,
+    president: document.getElementById('f_cuPresident').value.trim(),
+    respLouange: document.getElementById('f_cuLouange').value.trim(),
+    respPriere: document.getElementById('f_cuPriere').value.trim(),
+    lecteur: document.getElementById('f_cuLecteur').value.trim(),
+    predicateur: document.getElementById('f_cuPredicateur').value.trim(),
+    sujet: document.getElementById('f_cuSujet').value.trim(),
+    texteBiblique: document.getElementById('f_cuTexte').value.trim(),
+    chorales: document.getElementById('f_cuChorales').value.trim(),
+    annonces: document.getElementById('f_cuAnnonces').value.trim(),
+    nbHommes: document.getElementById('f_cuHommes').value,
+    nbFemmes: document.getElementById('f_cuFemmes').value,
+    nbEnfants: document.getElementById('f_cuEnfants').value,
+    dimes: document.getElementById('f_cuDimes').value,
+    offrandes: document.getElementById('f_cuOffrandes').value,
+    donsSpeciaux: document.getElementById('f_cuDons').value,
+    observations: document.getElementById('f_cuObservations').value.trim(),
+  };
+  if(!data.date){ toast('La date est obligatoire.','err'); return; }
+  if(existingId){
+    await RG('cultes/'+existingId).update(data);
+    logAction('Modification culte', data.typeCulte);
+  } else {
+    data.createdAt = Date.now();
+    await RG('cultes').push(data);
+    logAction('Nouveau culte', data.typeCulte);
+  }
+  toast('Culte enregistré.','ok');
+  closeModal();
+  renderRegistre_cultes();
+}
+
+/* ---------- Études bibliques ---------- */
+async function renderRegistre_etudes(){
+  const wrap = document.getElementById('registreTabContent');
+  wrap.innerHTML = '<div class="empty-state"><p>Chargement…</p></div>';
+  const snap = await RG('etudesBibliques').once('value');
+  let list = []; snap.forEach(c=>list.push({id:c.key,...c.val()}));
+  list.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+
+  wrap.innerHTML = `
+    <div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
+      ${canManageRegistre()?`<button class="btn btn-gold" onclick="openEtudeForm()">+ Nouvelle étude</button>`:''}
+    </div>
+    <div class="panel"><div class="table-wrap"><table><thead><tr>
+      <th>Sujet</th><th>Date</th><th>Enseignant</th><th>Participants</th><th></th>
+    </tr></thead><tbody>
+      ${list.length ? list.map(e=>`<tr>
+        <td><b style="color:var(--ink);">${esc(e.sujet||'—')}</b></td>
+        <td>${fmtDate(e.date)}</td>
+        <td>${esc(e.enseignant||'—')}</td>
+        <td>${e.nbParticipants||0}</td>
+        <td>${canManageRegistre()?`<button class="btn btn-ghost btn-sm" onclick='openEtudeForm(${JSON.stringify(e).replace(/'/g,"&#39;")})'>✏️</button>`:''}</td>
+      </tr>`).join('') : `<tr><td colspan="5"><div class="empty-state"><p>Aucune étude biblique enregistrée.</p></div></td></tr>`}
+    </tbody></table></div></div>
+  `;
+}
+function openEtudeForm(existing){
+  const e = existing || {};
+  openModal(`
+    <div class="modal-head"><h3>${existing?'Modifier l\'':'Nouvelle '}étude biblique</h3><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="grid2">
+        <div class="field"><label>Date</label><input type="date" id="f_etDate" value="${e.date||''}"></div>
+        <div class="field"><label>Heure</label><input type="time" id="f_etHeure" value="${e.heure||''}"></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>Ouvrant</label><input id="f_etOuvrant" value="${esc(e.ouvrant||'')}"></div>
+        <div class="field"><label>Conducteur</label><input id="f_etConducteur" value="${esc(e.conducteur||'')}"></div>
+      </div>
+      <div class="field"><label>Enseignant</label><input id="f_etEnseignant" value="${esc(e.enseignant||'')}"></div>
+      <div class="field"><label>Sujet</label><input id="f_etSujet" value="${esc(e.sujet||'')}"></div>
+      <div class="grid2">
+        <div class="field"><label>Texte principal</label><input id="f_etTextePrincipal" value="${esc(e.textePrincipal||'')}"></div>
+        <div class="field"><label>Textes complémentaires</label><input id="f_etTextesComp" value="${esc(e.textesComplementaires||'')}"></div>
+      </div>
+      <div class="field"><label>Nombre de participants</label><input type="number" id="f_etNbParticipants" value="${e.nbParticipants||0}"></div>
+      <div class="field"><label>Questions posées</label><textarea id="f_etQuestions">${esc(e.questions||'')}</textarea></div>
+      <div class="field"><label>Réponses</label><textarea id="f_etReponses">${esc(e.reponses||'')}</textarea></div>
+      <div class="field"><label>Exercices donnés</label><textarea id="f_etExercices">${esc(e.exercices||'')}</textarea></div>
+      <div class="field"><label>Observations</label><textarea id="f_etObservations">${esc(e.observations||'')}</textarea></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-gold" onclick="saveEtude(${existing?`'${e.id}'`:'null'})">Enregistrer</button>
+    </div>
+  `);
+}
+async function saveEtude(existingId){
+  const data = {
+    date: document.getElementById('f_etDate').value,
+    heure: document.getElementById('f_etHeure').value,
+    ouvrant: document.getElementById('f_etOuvrant').value.trim(),
+    conducteur: document.getElementById('f_etConducteur').value.trim(),
+    enseignant: document.getElementById('f_etEnseignant').value.trim(),
+    sujet: document.getElementById('f_etSujet').value.trim(),
+    textePrincipal: document.getElementById('f_etTextePrincipal').value.trim(),
+    textesComplementaires: document.getElementById('f_etTextesComp').value.trim(),
+    nbParticipants: document.getElementById('f_etNbParticipants').value,
+    questions: document.getElementById('f_etQuestions').value.trim(),
+    reponses: document.getElementById('f_etReponses').value.trim(),
+    exercices: document.getElementById('f_etExercices').value.trim(),
+    observations: document.getElementById('f_etObservations').value.trim(),
+  };
+  if(!data.date){ toast('La date est obligatoire.','err'); return; }
+  if(existingId){
+    await RG('etudesBibliques/'+existingId).update(data);
+    logAction('Modification étude biblique', data.sujet);
+  } else {
+    data.createdAt = Date.now();
+    await RG('etudesBibliques').push(data);
+    logAction('Nouvelle étude biblique', data.sujet);
+  }
+  toast('Étude enregistrée.','ok');
+  closeModal();
+  renderRegistre_etudes();
+}
+
+/* ---------- Sainte-Cène ---------- */
+async function renderRegistre_cene(){
+  const wrap = document.getElementById('registreTabContent');
+  wrap.innerHTML = '<div class="empty-state"><p>Chargement…</p></div>';
+  const snap = await RG('saintesCenes').once('value');
+  let list = []; snap.forEach(c=>list.push({id:c.key,...c.val()}));
+  list.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+
+  wrap.innerHTML = `
+    <div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
+      ${canManageRegistre()?`<button class="btn btn-gold" onclick="openCeneForm()">+ Nouvelle Sainte-Cène</button>`:''}
+    </div>
+    <div class="panel"><div class="table-wrap"><table><thead><tr>
+      <th>Date</th><th>Président</th><th>Prédicateur</th><th></th>
+    </tr></thead><tbody>
+      ${list.length ? list.map(c=>`<tr style="cursor:pointer;" onclick="openCeneDetail('${c.id}')">
+        <td><b style="color:var(--ink);">${fmtDate(c.date)}</b></td>
+        <td>${esc(c.president||'—')}</td>
+        <td>${esc(c.predicateur||'—')}</td>
+        <td>›</td>
+      </tr>`).join('') : `<tr><td colspan="4"><div class="empty-state"><p>Aucune Sainte-Cène enregistrée.</p></div></td></tr>`}
+    </tbody></table></div></div>
+  `;
+}
+function openCeneForm(existing){
+  const c = existing || {};
+  openModal(`
+    <div class="modal-head"><h3>${existing?'Modifier la':'Nouvelle'} Sainte-Cène</h3><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="grid2">
+        <div class="field"><label>Date</label><input type="date" id="f_ceDate" value="${c.date||''}"></div>
+        <div class="field"><label>Heure</label><input type="time" id="f_ceHeure" value="${c.heure||''}"></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>Président</label><input id="f_cePresident" value="${esc(c.president||'')}"></div>
+        <div class="field"><label>Conducteur</label><input id="f_ceConducteur" value="${esc(c.conducteur||'')}"></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>Lecteur</label><input id="f_ceLecteur" value="${esc(c.lecteur||'')}"></div>
+        <div class="field"><label>Prédicateur</label><input id="f_cePredicateur" value="${esc(c.predicateur||'')}"></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>Sujet</label><input id="f_ceSujet" value="${esc(c.sujet||'')}"></div>
+        <div class="field"><label>Texte biblique</label><input id="f_ceTexte" value="${esc(c.texteBiblique||'')}"></div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-gold" onclick="saveCene(${existing?`'${c.id}'`:'null'})">Enregistrer</button>
+    </div>
+  `);
+}
+async function saveCene(existingId){
+  const data = {
+    date: document.getElementById('f_ceDate').value,
+    heure: document.getElementById('f_ceHeure').value,
+    president: document.getElementById('f_cePresident').value.trim(),
+    conducteur: document.getElementById('f_ceConducteur').value.trim(),
+    lecteur: document.getElementById('f_ceLecteur').value.trim(),
+    predicateur: document.getElementById('f_cePredicateur').value.trim(),
+    sujet: document.getElementById('f_ceSujet').value.trim(),
+    texteBiblique: document.getElementById('f_ceTexte').value.trim(),
+  };
+  if(!data.date){ toast('La date est obligatoire.','err'); return; }
+  if(existingId){
+    await RG('saintesCenes/'+existingId).update(data);
+    logAction('Modification Sainte-Cène', data.date);
+  } else {
+    data.presences = {};
+    data.createdAt = Date.now();
+    await RG('saintesCenes').push(data);
+    logAction('Nouvelle Sainte-Cène', data.date);
+  }
+  toast('Sainte-Cène enregistrée.','ok');
+  closeModal();
+  renderRegistre_cene();
+}
+async function openCeneDetail(id){
+  const [cSnap, membresBSnap] = await Promise.all([RG('saintesCenes/'+id).once('value'), RG('membresBaptises').once('value')]);
+  const c = {id, ...cSnap.val()};
+  let membresB = []; membresBSnap.forEach(x=>membresB.push({id:x.key,...x.val()}));
+  const presences = c.presences || {};
+  const stats = {communie:0, present_non_communie:0, excuse:0, absent:0};
+  membresB.forEach(m=>{ const s = presences[m.id] || 'absent'; if(stats[s]!==undefined) stats[s]++; });
+
+  openModal(`
+    <div class="modal-head"><h3>Sainte-Cène — ${fmtDate(c.date)}</h3><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--ink-dim);"><b style="color:var(--ink);">Président :</b> ${esc(c.president||'—')} · <b style="color:var(--ink);">Prédicateur :</b> ${esc(c.predicateur||'—')}</p>
+      ${c.sujet?`<p style="font-size:13px;color:var(--ink-dim);"><b style="color:var(--ink);">Sujet :</b> ${esc(c.sujet)} (${esc(c.texteBiblique||'')})</p>`:''}
+      <hr class="sep">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <p style="font-size:13px;color:var(--ink);font-weight:600;margin:0;">Participation (${membresB.length} membres)</p>
+        ${canManageRegistre()?`<button class="btn btn-ghost btn-sm" onclick='openCenePresenceForm("${c.id}", ${JSON.stringify(presences).replace(/'/g,"&#39;")})'>Cocher</button>`:''}
+      </div>
+      <p style="font-size:12px;color:var(--ink-faint);">Communiants : ${stats.communie} · Présents non-communiants : ${stats.present_non_communie} · Excusés : ${stats.excuse} · Absents : ${stats.absent} · Taux : ${membresB.length?Math.round(stats.communie/membresB.length*100):0}%</p>
+    </div>
+    <div class="modal-foot">
+      ${canManageRegistre()?`<button class="btn btn-ghost btn-sm" onclick='closeModal();openCeneForm(${JSON.stringify(c).replace(/'/g,"&#39;")})'>✏️ Modifier</button>`:''}
+      <button class="btn btn-ghost btn-sm" onclick="closeModal()">Fermer</button>
+    </div>
+  `);
+}
+function openCenePresenceForm(id, presencesExistantes){
+  RG('membresBaptises').once('value').then(snap=>{
+    let membresB = []; snap.forEach(c=>membresB.push({id:c.key,...c.val()}));
+    openModal(`
+      <div class="modal-head"><h3>Participation à la Sainte-Cène</h3><button class="modal-close" onclick="closeModal()">×</button></div>
+      <div class="modal-body">
+        ${membresB.length ? membresB.map(m=>`
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--navy-border);">
+            <span style="font-size:13px;color:var(--ink);">${esc(m.prenom||'')} ${esc(m.nom||'')}</span>
+            <select id="cepres_${m.id}" style="background:var(--navy-700);border:1px solid var(--navy-border);border-radius:8px;color:var(--ink);padding:5px 8px;font-size:12px;">
+              <option value="communie" ${presencesExistantes[m.id]==='communie'?'selected':''}>A communié</option>
+              <option value="present_non_communie" ${presencesExistantes[m.id]==='present_non_communie'?'selected':''}>Présent, n'a pas communié</option>
+              <option value="excuse" ${presencesExistantes[m.id]==='excuse'?'selected':''}>Excusé</option>
+              <option value="absent" ${(!presencesExistantes[m.id]||presencesExistantes[m.id]==='absent')?'selected':''}>Absent</option>
+            </select>
+          </div>
+        `).join('') : `<div class="empty-state"><p>Aucun membre baptisé enregistré.</p></div>`}
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+        <button class="btn btn-gold" onclick='saveCenePresences("${id}", ${JSON.stringify(membresB.map(m=>m.id))})'>Enregistrer</button>
+      </div>
+    `);
+  });
+}
+async function saveCenePresences(id, memberIds){
+  const presences = {};
+  memberIds.forEach(mid=>{ const el = document.getElementById('cepres_'+mid); if(el) presences[mid] = el.value; });
+  await RG('saintesCenes/'+id+'/presences').set(presences);
+  logAction('Présences Sainte-Cène enregistrées', id);
+  toast('Participation enregistrée.','ok');
+  closeModal();
+  openCeneDetail(id);
+}
+
+/* ---------- Veillées de nuit ---------- */
+async function renderRegistre_veillees(){
+  const wrap = document.getElementById('registreTabContent');
+  wrap.innerHTML = '<div class="empty-state"><p>Chargement…</p></div>';
+  const snap = await RG('veillees').once('value');
+  let list = []; snap.forEach(c=>list.push({id:c.key,...c.val()}));
+  list.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  wrap.innerHTML = `
+    <div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
+      ${canManageRegistre()?`<button class="btn btn-gold" onclick="openVeilleeForm()">+ Nouvelle veillée</button>`:''}
+    </div>
+    <div class="panel"><div class="table-wrap"><table><thead><tr>
+      <th>Date</th><th>Dirigeant</th><th>Groupe</th><th>Participants</th><th></th>
+    </tr></thead><tbody>
+      ${list.length ? list.map(v=>`<tr>
+        <td><b style="color:var(--ink);">${fmtDate(v.date)}</b></td>
+        <td>${esc(v.dirigeant||'—')}</td>
+        <td>${esc(v.groupeResponsable||'—')}</td>
+        <td>${v.nbParticipants||0}</td>
+        <td>${canManageRegistre()?`<button class="btn btn-ghost btn-sm" onclick='openVeilleeForm(${JSON.stringify(v).replace(/'/g,"&#39;")})'>✏️</button>`:''}</td>
+      </tr>`).join('') : `<tr><td colspan="5"><div class="empty-state"><p>Aucune veillée enregistrée.</p></div></td></tr>`}
+    </tbody></table></div></div>
+  `;
+}
+function openVeilleeForm(existing){
+  const v = existing || {};
+  openModal(`
+    <div class="modal-head"><h3>${existing?'Modifier la':'Nouvelle'} veillée</h3><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="grid2">
+        <div class="field"><label>Date</label><input type="date" id="f_veDate" value="${v.date||''}"></div>
+        <div class="field"><label>Horaire</label><input id="f_veHoraire" placeholder="Ex: 22h-2h" value="${esc(v.horaire||'')}"></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>Dirigeant</label><input id="f_veDirigeant" value="${esc(v.dirigeant||'')}"></div>
+        <div class="field"><label>Groupe responsable</label><input id="f_veGroupeResponsable" value="${esc(v.groupeResponsable||'')}"></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>Groupe présent ?</label><select id="f_veGroupePresent"><option value="oui" ${v.groupePresent==='oui'?'selected':''}>Oui</option><option value="non" ${v.groupePresent==='non'?'selected':''}>Non</option></select></div>
+        <div class="field"><label>Nombre de participants</label><input type="number" id="f_veNbParticipants" value="${v.nbParticipants||0}"></div>
+      </div>
+      <div class="field"><label>Programme réalisé</label><textarea id="f_veProgramme">${esc(v.programme||'')}</textarea></div>
+      <div class="field"><label>Observations</label><textarea id="f_veObservations">${esc(v.observations||'')}</textarea></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-gold" onclick="saveVeillee(${existing?`'${v.id}'`:'null'})">Enregistrer</button>
+    </div>
+  `);
+}
+async function saveVeillee(existingId){
+  const data = {
+    date: document.getElementById('f_veDate').value,
+    horaire: document.getElementById('f_veHoraire').value.trim(),
+    dirigeant: document.getElementById('f_veDirigeant').value.trim(),
+    groupeResponsable: document.getElementById('f_veGroupeResponsable').value.trim(),
+    groupePresent: document.getElementById('f_veGroupePresent').value,
+    nbParticipants: document.getElementById('f_veNbParticipants').value,
+    programme: document.getElementById('f_veProgramme').value.trim(),
+    observations: document.getElementById('f_veObservations').value.trim(),
+  };
+  if(!data.date){ toast('La date est obligatoire.','err'); return; }
+  if(existingId){ await RG('veillees/'+existingId).update(data); logAction('Modification veillée', data.date); }
+  else { data.createdAt = Date.now(); await RG('veillees').push(data); logAction('Nouvelle veillée', data.date); }
+  toast('Veillée enregistrée.','ok');
+  closeModal();
+  renderRegistre_veillees();
+}
+
+/* ---------- Réveils ---------- */
+async function renderRegistre_reveils(){
+  const wrap = document.getElementById('registreTabContent');
+  wrap.innerHTML = '<div class="empty-state"><p>Chargement…</p></div>';
+  const snap = await RG('reveils').once('value');
+  let list = []; snap.forEach(c=>list.push({id:c.key,...c.val()}));
+  list.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  wrap.innerHTML = `
+    <div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
+      ${canManageRegistre()?`<button class="btn btn-gold" onclick="openReveilForm()">+ Nouveau réveil</button>`:''}
+    </div>
+    <div class="panel"><div class="table-wrap"><table><thead><tr>
+      <th>Date</th><th>Type</th><th>Sujet</th><th>Durée</th><th></th>
+    </tr></thead><tbody>
+      ${list.length ? list.map(r=>`<tr>
+        <td><b style="color:var(--ink);">${fmtDate(r.date)}</b></td>
+        <td>${esc(r.typeReveil||'—')}</td>
+        <td>${esc(r.sujet||'—')}</td>
+        <td>${esc(r.duree||'—')}</td>
+        <td>${canManageRegistre()?`<button class="btn btn-ghost btn-sm" onclick='openReveilForm(${JSON.stringify(r).replace(/'/g,"&#39;")})'>✏️</button>`:''}</td>
+      </tr>`).join('') : `<tr><td colspan="5"><div class="empty-state"><p>Aucun réveil enregistré.</p></div></td></tr>`}
+    </tbody></table></div></div>
+  `;
+}
+function openReveilForm(existing){
+  const r = existing || {};
+  openModal(`
+    <div class="modal-head"><h3>${existing?'Modifier le':'Nouveau'} réveil</h3><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="grid2">
+        <div class="field"><label>Date</label><input type="date" id="f_rvDate" value="${r.date||''}"></div>
+        <div class="field"><label>Type de réveil</label><input id="f_rvType" value="${esc(r.typeReveil||'')}"></div>
+      </div>
+      <div class="field"><label>Sujet</label><input id="f_rvSujet" value="${esc(r.sujet||'')}"></div>
+      <div class="grid2">
+        <div class="field"><label>Durée</label><input id="f_rvDuree" placeholder="Ex: 3 jours" value="${esc(r.duree||'')}"></div>
+        <div class="field"><label>Invités</label><input id="f_rvInvites" value="${esc(r.invites||'')}"></div>
+      </div>
+      <div class="field"><label>Groupes participants</label><input id="f_rvGroupes" value="${esc(r.groupesParticipants||'')}"></div>
+      <div class="field"><label>Responsables prévus (un par ligne : Nom, Présent/Remplacé par...)</label><textarea id="f_rvResponsables" placeholder="Frère Paul, Présent">${esc(r.responsablesRaw||'')}</textarea></div>
+      <div class="field"><label>Programme</label><textarea id="f_rvProgramme">${esc(r.programme||'')}</textarea></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-gold" onclick="saveReveil(${existing?`'${r.id}'`:'null'})">Enregistrer</button>
+    </div>
+  `);
+}
+async function saveReveil(existingId){
+  const data = {
+    date: document.getElementById('f_rvDate').value,
+    typeReveil: document.getElementById('f_rvType').value.trim(),
+    sujet: document.getElementById('f_rvSujet').value.trim(),
+    duree: document.getElementById('f_rvDuree').value.trim(),
+    invites: document.getElementById('f_rvInvites').value.trim(),
+    groupesParticipants: document.getElementById('f_rvGroupes').value.trim(),
+    responsablesRaw: document.getElementById('f_rvResponsables').value.trim(),
+    programme: document.getElementById('f_rvProgramme').value.trim(),
+  };
+  if(!data.date){ toast('La date est obligatoire.','err'); return; }
+  if(existingId){ await RG('reveils/'+existingId).update(data); logAction('Modification réveil', data.sujet); }
+  else { data.createdAt = Date.now(); await RG('reveils').push(data); logAction('Nouveau réveil', data.sujet); }
+  toast('Réveil enregistré.','ok');
+  closeModal();
+  renderRegistre_reveils();
+}
+
+/* ---------- Missions & Évangélisation ---------- */
+const TYPES_MISSION = ['Mission', 'Tournée d\'évangélisation', 'Convention', 'Action de grâce', 'Croisade', 'Visite missionnaire'];
+async function renderRegistre_missions(){
+  const wrap = document.getElementById('registreTabContent');
+  wrap.innerHTML = '<div class="empty-state"><p>Chargement…</p></div>';
+  const snap = await RG('missions').once('value');
+  let list = []; snap.forEach(c=>list.push({id:c.key,...c.val()}));
+  list.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  wrap.innerHTML = `
+    <div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
+      ${canManageRegistre()?`<button class="btn btn-gold" onclick="openMissionForm()">+ Nouvelle mission</button>`:''}
+    </div>
+    <div class="panel"><div class="table-wrap"><table><thead><tr>
+      <th>Type</th><th>Date</th><th>Lieu</th><th>Conversions</th><th></th>
+    </tr></thead><tbody>
+      ${list.length ? list.map(m=>`<tr>
+        <td><b style="color:var(--ink);">${esc(m.typeMission||'—')}</b></td>
+        <td>${fmtDate(m.date)}</td>
+        <td>${esc(m.lieu||'—')}</td>
+        <td>${m.conversions||0}</td>
+        <td>${canManageRegistre()?`<button class="btn btn-ghost btn-sm" onclick='openMissionForm(${JSON.stringify(m).replace(/'/g,"&#39;")})'>✏️</button>`:''}</td>
+      </tr>`).join('') : `<tr><td colspan="5"><div class="empty-state"><p>Aucune mission enregistrée.</p></div></td></tr>`}
+    </tbody></table></div></div>
+  `;
+}
+function openMissionForm(existing){
+  const m = existing || {};
+  openModal(`
+    <div class="modal-head"><h3>${existing?'Modifier la':'Nouvelle'} activité missionnaire</h3><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="grid2">
+        <div class="field"><label>Type</label><select id="f_miType">${TYPES_MISSION.map(t=>`<option ${m.typeMission===t?'selected':''}>${t}</option>`).join('')}</select></div>
+        <div class="field"><label>Date</label><input type="date" id="f_miDate" value="${m.date||''}"></div>
+      </div>
+      <div class="field"><label>Lieu</label><input id="f_miLieu" value="${esc(m.lieu||'')}"></div>
+      <div class="grid2">
+        <div class="field"><label>Organisateur</label><input id="f_miOrganisateur" value="${esc(m.organisateur||'')}"></div>
+        <div class="field"><label>Responsable</label><input id="f_miResponsable" value="${esc(m.responsable||'')}"></div>
+      </div>
+      <div class="field"><label>Objectif</label><textarea id="f_miObjectif">${esc(m.objectif||'')}</textarea></div>
+      <div class="grid2">
+        <div class="field"><label>Nombre de participants</label><input type="number" id="f_miNbParticipants" value="${m.nbParticipants||0}"></div>
+        <div class="field"><label>Invitations</label><input type="number" id="f_miInvitations" value="${m.invitations||0}"></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>Conversions</label><input type="number" id="f_miConversions" value="${m.conversions||0}"></div>
+        <div class="field"><label>Restaurations</label><input type="number" id="f_miRestaurations" value="${m.restaurations||0}"></div>
+      </div>
+      <div class="field"><label>Résultats</label><textarea id="f_miResultats">${esc(m.resultats||'')}</textarea></div>
+      <div class="field"><label>Témoignages</label><textarea id="f_miTemoignages">${esc(m.temoignages||'')}</textarea></div>
+      <div class="field"><label>Dépenses (G)</label><input type="number" id="f_miDepenses" value="${m.depenses||0}"></div>
+      <div class="field"><label>Observations</label><textarea id="f_miObservations">${esc(m.observations||'')}</textarea></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-gold" onclick="saveMission(${existing?`'${m.id}'`:'null'})">Enregistrer</button>
+    </div>
+  `);
+}
+async function saveMission(existingId){
+  const data = {
+    typeMission: document.getElementById('f_miType').value,
+    date: document.getElementById('f_miDate').value,
+    lieu: document.getElementById('f_miLieu').value.trim(),
+    organisateur: document.getElementById('f_miOrganisateur').value.trim(),
+    responsable: document.getElementById('f_miResponsable').value.trim(),
+    objectif: document.getElementById('f_miObjectif').value.trim(),
+    nbParticipants: document.getElementById('f_miNbParticipants').value,
+    invitations: document.getElementById('f_miInvitations').value,
+    conversions: document.getElementById('f_miConversions').value,
+    restaurations: document.getElementById('f_miRestaurations').value,
+    resultats: document.getElementById('f_miResultats').value.trim(),
+    temoignages: document.getElementById('f_miTemoignages').value.trim(),
+    depenses: document.getElementById('f_miDepenses').value,
+    observations: document.getElementById('f_miObservations').value.trim(),
+  };
+  if(!data.date){ toast('La date est obligatoire.','err'); return; }
+  if(existingId){ await RG('missions/'+existingId).update(data); logAction('Modification mission', data.typeMission); }
+  else { data.createdAt = Date.now(); await RG('missions').push(data); logAction('Nouvelle mission', data.typeMission); }
+  toast('Activité missionnaire enregistrée.','ok');
+  closeModal();
+  renderRegistre_missions();
+}
+
+/* ---------- Archives (recherche transversale) ---------- */
+async function renderRegistre_archives(){
+  const wrap = document.getElementById('registreTabContent');
+  wrap.innerHTML = '<div class="empty-state"><p>Chargement…</p></div>';
+  const [rSnap, cSnap, eSnap, ceSnap, vSnap, rvSnap, mSnap] = await Promise.all([
+    RG('reunions').once('value'), RG('cultes').once('value'), RG('etudesBibliques').once('value'),
+    RG('saintesCenes').once('value'), RG('veillees').once('value'), RG('reveils').once('value'), RG('missions').once('value')
+  ]);
+  const collect = (snap, type, labelField) => { const arr=[]; snap.forEach(c=>{ const v=c.val(); arr.push({id:c.key, type, label:v[labelField]||type, date:v.date, raw:v}); }); return arr; };
+  let all = [
+    ...collect(rSnap,'Réunion','type'), ...collect(cSnap,'Culte','typeCulte'), ...collect(eSnap,'Étude biblique','sujet'),
+    ...collect(ceSnap,'Sainte-Cène','sujet'), ...collect(vSnap,'Veillée','dirigeant'), ...collect(rvSnap,'Réveil','sujet'),
+    ...collect(mSnap,'Mission','typeMission')
+  ];
+  all.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  window._archivesCache = all;
+
+  const annees = [...new Set(all.map(a=>(a.date||'').slice(0,4)).filter(Boolean))].sort().reverse();
+  const types = [...new Set(all.map(a=>a.type))];
+
+  wrap.innerHTML = `
+    <div class="panel" style="margin-bottom:16px;">
+      <div class="grid2">
+        <div class="field"><label>Année</label><select id="f_arcAnnee" onchange="filterArchives()"><option value="">Toutes</option>${annees.map(a=>`<option value="${a}">${a}</option>`).join('')}</select></div>
+        <div class="field"><label>Type</label><select id="f_arcType" onchange="filterArchives()"><option value="">Tous</option>${types.map(t=>`<option value="${t}">${t}</option>`).join('')}</select></div>
+      </div>
+      <div class="field"><label>Mot-clé</label><input id="f_arcMotCle" placeholder="Rechercher…" oninput="filterArchives()"></div>
+    </div>
+    <div class="panel"><div class="table-wrap"><table><thead><tr><th>Type</th><th>Libellé</th><th>Date</th></tr></thead><tbody id="archivesTbody"></tbody></table></div></div>
+  `;
+  renderArchivesRows(all);
+}
+function renderArchivesRows(list){
+  const tbody = document.getElementById('archivesTbody');
+  tbody.innerHTML = list.length ? list.map(a=>`<tr><td><span class="badge badge-gold">${esc(a.type)}</span></td><td>${esc(a.label)}</td><td>${fmtDate(a.date)}</td></tr>`).join('') : `<tr><td colspan="3"><div class="empty-state"><p>Aucun résultat.</p></div></td></tr>`;
+}
+function filterArchives(){
+  const annee = document.getElementById('f_arcAnnee').value;
+  const type = document.getElementById('f_arcType').value;
+  const motCle = document.getElementById('f_arcMotCle').value.toLowerCase();
+  let list = window._archivesCache || [];
+  if(annee) list = list.filter(a=>(a.date||'').startsWith(annee));
+  if(type) list = list.filter(a=>a.type===type);
+  if(motCle) list = list.filter(a=>JSON.stringify(a.raw).toLowerCase().includes(motCle));
+  renderArchivesRows(list);
 }
 </script>
 </body>
