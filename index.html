@@ -2342,6 +2342,35 @@ async function renderRegistre_accueil(){
   const totalDimes = cultes.reduce((s,c)=>s+(Number(c.dimes)||0),0);
   const totalOffrandes = cultes.reduce((s,c)=>s+(Number(c.offrandes)||0),0);
 
+  // Statistiques de présence agrégées (réunions + Sainte-Cène)
+  let presenceHtml = '';
+  if(membresB.length){
+    const reunionsAvecPresences = reunions.filter(r=>r.presences && Object.keys(r.presences).length);
+    let totalPresentsReunions = 0, totalPossibleReunions = 0;
+    reunionsAvecPresences.forEach(r=>{
+      Object.values(r.presences).forEach(s=>{ if(s==='present') totalPresentsReunions++; });
+      totalPossibleReunions += membresB.length;
+    });
+    const tauxReunions = totalPossibleReunions ? Math.round(totalPresentsReunions/totalPossibleReunions*100) : 0;
+
+    const cenesAvecPresences = cenes.filter(c=>c.presences && Object.keys(c.presences).length);
+    let totalCommunies = 0, totalPossibleCenes = 0;
+    cenesAvecPresences.forEach(c=>{
+      Object.values(c.presences).forEach(s=>{ if(s==='communie') totalCommunies++; });
+      totalPossibleCenes += membresB.length;
+    });
+    const tauxCenes = totalPossibleCenes ? Math.round(totalCommunies/totalPossibleCenes*100) : 0;
+
+    if(reunionsAvecPresences.length || cenesAvecPresences.length){
+      presenceHtml = `
+        <div class="panel">
+          <div class="panel-head"><h3>Statistiques de présence</h3></div>
+          ${reunionsAvecPresences.length ? `<p style="font-size:13px;color:var(--ink-dim);">Réunions (${reunionsAvecPresences.length} avec présences enregistrées) — taux de présence moyen : <b style="color:var(--gold-bright);">${tauxReunions}%</b></p>` : ''}
+          ${cenesAvecPresences.length ? `<p style="font-size:13px;color:var(--ink-dim);">Sainte-Cène (${cenesAvecPresences.length} avec présences enregistrées) — taux de communion moyen : <b style="color:var(--gold-bright);">${tauxCenes}%</b></p>` : ''}
+        </div>`;
+    }
+  }
+
   wrap.innerHTML = `
     <div class="stat-grid">
       <div class="stat-card"><span class="ic">👥</span><div class="num">${membresB.length}</div><div class="lbl">Membres baptisés</div></div>
@@ -2351,6 +2380,7 @@ async function renderRegistre_accueil(){
       <div class="stat-card"><span class="ic">📄</span><div class="num">${pvEnAttente.length}</div><div class="lbl">PV en attente d'approbation</div></div>
       <div class="stat-card"><span class="ic">💰</span><div class="num">${fmtMoney(totalDimes+totalOffrandes)}</div><div class="lbl">Dîmes + offrandes cumulées</div></div>
     </div>
+    ${presenceHtml}
     <div class="panel">
       <div class="panel-head"><h3>Prochaines réunions</h3></div>
       ${prochainesReunions.length ? prochainesReunions.map(r=>`<div style="padding:8px 0;border-bottom:1px solid var(--navy-border);font-size:13px;color:var(--ink-dim);">${fmtDate(r.date)} — ${esc(r.type||'Réunion')} (${esc(r.lieu||'—')})</div>`).join('') : `<div class="empty-state"><p>Aucune réunion à venir programmée.</p></div>`}
@@ -2525,7 +2555,7 @@ function openPresenceForm(type, id, presencesExistantes){
               <option value="retard" ${presencesExistantes[m.id]==='retard'?'selected':''}>Retard</option>
             </select>
           </div>
-        `).join('') : `<div class="empty-state"><p>Aucun membre baptisé enregistré. Ajoute d'abord des membres dans l'onglet "Membres baptisés".</p></div>`}
+        `).join('') : `<div class="empty-state"><p>Aucun membre baptisé enregistré.<br>Va dans l'onglet "Membres baptisés" → "📥 Importer une liste" pour ajouter tous tes membres d'un coup.</p></div>`}
       </div>
       <div class="modal-foot">
         <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
@@ -2620,9 +2650,12 @@ async function renderRegistre_membresB(){
   window._membresBCache = list;
 
   wrap.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
       <input type="text" placeholder="Rechercher un membre…" oninput="filterMembresB(this.value)" style="background:var(--navy-800);border:1px solid var(--navy-border);border-radius:9px;padding:9px 12px;color:var(--ink);font-size:13px;width:200px;">
-      ${canManageRegistre()?`<button class="btn btn-gold" onclick="openMembreBForm()">+ Nouveau membre</button>`:''}
+      ${canManageRegistre()?`<div style="display:flex;gap:10px;">
+        <button class="btn btn-ghost" onclick="openImportMembresBForm()">📥 Importer une liste</button>
+        <button class="btn btn-gold" onclick="openMembreBForm()">+ Nouveau membre</button>
+      </div>`:''}
     </div>
     <div class="panel"><div class="table-wrap"><table><thead><tr>
       <th>Nom</th><th>Sexe</th><th>Baptême</th><th>Ministère</th><th>Statut</th><th></th>
@@ -2707,6 +2740,72 @@ async function saveMembreB(existingId){
   toast('Enregistré.','ok');
   closeModal();
   renderRegistre_membresB();
+}
+
+/* ---------- Import en masse (copier-coller depuis Excel ou saisie libre) ---------- */
+function openImportMembresBForm(){
+  openModal(`
+    <div class="modal-head"><h3>Importer une liste de membres</h3><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <p style="color:var(--ink-dim);font-size:13px;">Colle ta liste ci-dessous, <b style="color:var(--ink);">un membre par ligne</b>. Sépare les informations par une virgule, dans cet ordre :</p>
+      <p style="color:var(--gold-bright);font-size:12.5px;margin:8px 0;font-family:monospace;">Prénom, Nom, Sexe (M/F), Téléphone, Ministère</p>
+      <p style="color:var(--ink-faint);font-size:12px;">Tu peux laisser des champs vides (ex: pas de téléphone) — laisse juste la virgule à sa place. Le copier-coller direct depuis Excel/Google Sheets fonctionne aussi (colonnes séparées par tabulation).</p>
+      <div class="field" style="margin-top:12px;">
+        <textarea id="f_importText" style="min-height:180px;font-family:monospace;font-size:12.5px;" placeholder="Jean, Pierre, M, 3712-3456, Chorale
+Marie, Joseph, F, , Jeunesse
+Paul, Louis, M, 3798-1122,"></textarea>
+      </div>
+      <div id="importPreview" style="margin-top:10px;font-size:12.5px;color:var(--ink-dim);"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-gold" onclick="previewImportMembresB()">Prévisualiser</button>
+    </div>
+  `);
+}
+function previewImportMembresB(){
+  const raw = document.getElementById('f_importText').value;
+  const lines = raw.split('\n').map(l=>l.trim()).filter(Boolean);
+  if(!lines.length){ toast('Colle au moins une ligne.','err'); return; }
+  const parsed = lines.map(l=>{
+    const sep = l.includes('\t') ? '\t' : ',';
+    const parts = l.split(sep).map(p=>p.trim());
+    return { prenom: parts[0]||'', nom: parts[1]||'', sexe: (parts[2]||'').toUpperCase(), telephone: parts[3]||'', ministere: parts[4]||'' };
+  }).filter(p=>p.nom || p.prenom);
+  window._importPreviewData = parsed;
+  const previewEl = document.getElementById('importPreview');
+  previewEl.innerHTML = `
+    <p style="color:var(--gold-bright);font-weight:600;">${parsed.length} membre(s) détecté(s) :</p>
+    <div style="max-height:200px;overflow-y:auto;border:1px solid var(--navy-border);border-radius:8px;padding:8px;margin-top:6px;">
+      ${parsed.map(p=>`<div style="padding:4px 0;border-bottom:1px solid var(--navy-border);">${esc(p.prenom)} ${esc(p.nom)} ${p.sexe?'('+esc(p.sexe)+')':''} ${p.telephone?'· '+esc(p.telephone):''} ${p.ministere?'· '+esc(p.ministere):''}</div>`).join('')}
+    </div>
+  `;
+  const modalFoot = document.querySelector('#modalBox .modal-foot');
+  if(!document.getElementById('btnConfirmImport')){
+    modalFoot.insertAdjacentHTML('beforeend', `<button id="btnConfirmImport" class="btn btn-gold" onclick="confirmImportMembresB()">Importer ${parsed.length} membre(s)</button>`);
+  } else {
+    document.getElementById('btnConfirmImport').textContent = `Importer ${parsed.length} membre(s)`;
+  }
+}
+async function confirmImportMembresB(){
+  const parsed = window._importPreviewData || [];
+  if(!parsed.length){ toast('Rien à importer.','err'); return; }
+  const btn = document.getElementById('btnConfirmImport');
+  btn.textContent = 'Importation…'; btn.disabled = true;
+  try{
+    const writes = parsed.map(p => RG('membresBaptises').push({
+      prenom: p.prenom, nom: p.nom, sexe: p.sexe==='M'||p.sexe==='F'?p.sexe:'',
+      telephone: p.telephone, ministere: p.ministere, statut: 'actif', createdAt: Date.now()
+    }));
+    await Promise.all(writes);
+    logAction('Import en masse de membres baptisés', parsed.length+' membre(s)');
+    toast(parsed.length+' membre(s) importé(s) avec succès.','ok');
+    closeModal();
+    renderRegistre_membresB();
+  }catch(e){
+    toast('Erreur lors de l\'import : '+e.message,'err');
+    btn.textContent = 'Réessayer'; btn.disabled = false;
+  }
 }
 
 /* ---------- Gestion des cultes ---------- */
@@ -3022,7 +3121,7 @@ function openCenePresenceForm(id, presencesExistantes){
               <option value="absent" ${(!presencesExistantes[m.id]||presencesExistantes[m.id]==='absent')?'selected':''}>Absent</option>
             </select>
           </div>
-        `).join('') : `<div class="empty-state"><p>Aucun membre baptisé enregistré.</p></div>`}
+        `).join('') : `<div class="empty-state"><p>Aucun membre baptisé enregistré.<br>Va dans l'onglet "Membres baptisés" → "📥 Importer une liste" pour ajouter tous tes membres d'un coup.</p></div>`}
       </div>
       <div class="modal-foot">
         <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
