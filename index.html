@@ -349,8 +349,17 @@ function toast(msg, type){
   setTimeout(()=>{ t.style.opacity='0'; t.style.transition='opacity .3s'; setTimeout(()=>t.remove(),300); }, 3200);
 }
 function uid(prefix){ return (prefix||'id') + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
-function fmtDate(iso){ if(!iso) return '—'; const d=new Date(iso); return d.toLocaleDateString('fr-FR',{day:'2-digit',month:'short',year:'numeric'}); }
-function fmtDateTime(iso){ if(!iso) return '—'; const d=new Date(iso); return d.toLocaleDateString('fr-FR',{day:'2-digit',month:'short',year:'numeric'})+' '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}); }
+function parseLocalDate(iso){
+  if(!iso) return null;
+  // Les champs <input type="date"> donnent "YYYY-MM-DD" sans heure ; interprété tel quel,
+  // JavaScript le lit comme minuit UTC, ce qui décale d'un jour en arrière dans les fuseaux
+  // horaires à l'ouest de Greenwich (comme Haïti). On le parse donc manuellement en local.
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if(m) return new Date(parseInt(m[1],10), parseInt(m[2],10)-1, parseInt(m[3],10));
+  return new Date(iso);
+}
+function fmtDate(iso){ if(!iso) return '—'; const d=parseLocalDate(iso); return d.toLocaleDateString('fr-FR',{day:'2-digit',month:'short',year:'numeric'}); }
+function fmtDateTime(iso){ if(!iso) return '—'; const d=parseLocalDate(iso); return d.toLocaleDateString('fr-FR',{day:'2-digit',month:'short',year:'numeric'})+' '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}); }
 function fmtMoney(n){ if(n===undefined||n===null||n==='') return '—'; return Number(n).toLocaleString('fr-FR')+' G'; }
 function esc(s){ return (s===undefined||s===null)?'':String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function initials(name){ if(!name) return '--'; return name.trim().split(/\s+/).slice(0,2).map(w=>w[0]).join('').toUpperCase(); }
@@ -2903,16 +2912,21 @@ async function saveCulte(existingId){
     observations: document.getElementById('f_cuObservations').value.trim(),
   };
   if(!data.date){ toast('La date est obligatoire.','err'); return; }
-  if(existingId){
-    await RG('cultes/'+existingId).update(data);
-    logAction('Modification culte', data.typeCulte);
-  } else {
-    data.createdAt = Date.now();
-    await RG('cultes').push(data);
-    logAction('Nouveau culte', data.typeCulte);
+  try{
+    if(existingId){
+      await RG('cultes/'+existingId).update(data);
+      logAction('Modification culte', data.typeCulte);
+    } else {
+      data.createdAt = Date.now();
+      await RG('cultes').push(data);
+      logAction('Nouveau culte', data.typeCulte);
+    }
+    toast('Culte enregistré.','ok');
+    closeModal();
+  }catch(e){
+    toast('Erreur lors de l\'enregistrement : '+e.message,'err');
+    return;
   }
-  toast('Culte enregistré.','ok');
-  closeModal();
   renderRegistre_cultes();
 }
 
