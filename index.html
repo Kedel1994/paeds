@@ -467,7 +467,7 @@ async function checkOverdueActivityReports(){
   ]);
   const today = new Date(); today.setHours(0,0,0,0);
   const todayStr = today.toISOString().slice(0,10);
-  let ministeres = {}; minSnap.forEach(c=>ministeres[c.key]=c.val());
+  let ministeres = {}; minSnap.forEach(c=>{ministeres[c.key]=c.val();});
   let rapporteesIds = new Set();
   repSnap.forEach(c=>{ const v=c.val(); if(v.activiteId) rapporteesIds.add(v.activiteId); });
 
@@ -509,7 +509,7 @@ async function checkMonthlyReports(){
   if(isLastDayOfMonth(today)) monthsToCheck.push(today.toISOString().slice(0,7));
 
   const [minSnap, repSnap] = await Promise.all([R('ministeres').once('value'), R('rapports').once('value')]);
-  let ministeres = []; minSnap.forEach(c=>ministeres.push({id:c.key,...c.val()}));
+  let ministeres = []; minSnap.forEach(c=>{ministeres.push({id:c.key,...c.val()});});
   let soumis = {}; // clé: ministereId|mois
   repSnap.forEach(c=>{ const v=c.val(); if(v.type==='mensuel' && v.mois && v.ministereId) soumis[v.ministereId+'|'+v.mois] = true; });
 
@@ -853,11 +853,11 @@ async function render_dashboard(){
   ]);
 
   let ministeres=[], activites=[], rapports=[], financements=[], publications=[];
-  minSnap.forEach(c=>ministeres.push({id:c.key,...c.val()}));
-  actSnap.forEach(c=>activites.push({id:c.key,...c.val()}));
-  repSnap.forEach(c=>rapports.push({id:c.key,...c.val()}));
-  finSnap.forEach(c=>financements.push({id:c.key,...c.val()}));
-  pubSnap.forEach(c=>publications.push({id:c.key,...c.val()}));
+  minSnap.forEach(c=>{ministeres.push({id:c.key,...c.val()});});
+  actSnap.forEach(c=>{activites.push({id:c.key,...c.val()});});
+  repSnap.forEach(c=>{rapports.push({id:c.key,...c.val()});});
+  finSnap.forEach(c=>{financements.push({id:c.key,...c.val()});});
+  pubSnap.forEach(c=>{publications.push({id:c.key,...c.val()});});
 
   if(!canSeeAll()){
     const mid = myMinistereId();
@@ -961,7 +961,7 @@ async function render_ministeres(){
   el.innerHTML = '<div class="empty-state"><p>Chargement…</p></div>';
   const snap = await R('ministeres').once('value');
   let list = [];
-  snap.forEach(c=>list.push({id:c.key,...c.val()}));
+  snap.forEach(c=>{list.push({id:c.key,...c.val()});});
   list.sort((a,b)=>(a.nom||'').localeCompare(b.nom||''));
 
   el.innerHTML = `
@@ -1131,7 +1131,7 @@ async function deleteMinistry(id){
   try{
     const usersSnap = await R('users').orderByChild('ministereId').equalTo(id).once('value');
     const removals = [];
-    usersSnap.forEach(c=> removals.push(c.ref.remove()));
+    usersSnap.forEach(c=>{ removals.push(c.ref.remove()); });
     await Promise.all(removals);
     await R('ministeres/'+id).remove();
     logAction('Suppression ministère', id);
@@ -1173,7 +1173,7 @@ async function suspendMinistry(id, currentStatut){
   const newStatut = currentStatut==='suspendu' ? 'actif' : 'suspendu';
   await R('ministeres/'+id).update({statut:newStatut});
   const usersSnap = await R('users').orderByChild('ministereId').equalTo(id).once('value');
-  usersSnap.forEach(c=> c.ref.update({statut:newStatut}));
+  usersSnap.forEach(c=>{ c.ref.update({statut:newStatut}); });
   logAction(newStatut==='suspendu'?'Suspension ministère':'Réactivation ministère', id);
   toast(newStatut==='suspendu'?'Ministère suspendu.':'Ministère réactivé.','ok');
   closeModal();
@@ -1325,8 +1325,8 @@ async function render_activites(){
   const el = document.getElementById('contentArea');
   el.innerHTML = '<div class="empty-state"><p>Chargement…</p></div>';
   const [actSnap, minSnap] = await Promise.all([R('activites').once('value'), R('ministeres').once('value')]);
-  let list = []; actSnap.forEach(c=>list.push({id:c.key,...c.val()}));
-  let ministeres = {}; minSnap.forEach(c=>ministeres[c.key]=c.val());
+  let list = []; actSnap.forEach(c=>{list.push({id:c.key,...c.val()});});
+  let ministeres = {}; minSnap.forEach(c=>{ministeres[c.key]=c.val();});
   if(!canSeeAll()) list = list.filter(a=>a.ministereId===myMinistereId() || a.ministereId==='general');
   list.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   window._activitesCache = list; window._ministeresCache = ministeres;
@@ -1551,7 +1551,7 @@ async function render_financements(){
   const el = document.getElementById('contentArea');
   el.innerHTML = '<div class="empty-state"><p>Chargement…</p></div>';
   const snap = await R('financements').once('value');
-  let list = []; snap.forEach(c=>list.push({id:c.key,...c.val()}));
+  let list = []; snap.forEach(c=>{list.push({id:c.key,...c.val()});});
   if(!canSeeAll()) list = list.filter(f=>f.ministereId===myMinistereId());
   list.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
 
@@ -1744,7 +1744,7 @@ async function render_rapports(){
   const el = document.getElementById('contentArea');
   el.innerHTML = '<div class="empty-state"><p>Chargement…</p></div>';
   const snap = await R('rapports').once('value');
-  let list = []; snap.forEach(c=>list.push({id:c.key,...c.val()}));
+  let list = []; snap.forEach(c=>{list.push({id:c.key,...c.val()});});
   if(!canSeeAll()) list = list.filter(r=>r.ministereId===myMinistereId() || r.ministereId==='general');
   list.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
 
@@ -1921,11 +1921,11 @@ async function render_membres(){
   const el = document.getElementById('contentArea');
   el.innerHTML = '<div class="empty-state"><p>Chargement…</p></div>';
   const [membresSnap, minSnap] = await Promise.all([R('membres').once('value'), canSeeAll() ? R('ministeres').once('value') : Promise.resolve(null)]);
-  let list = []; membresSnap.forEach(c=>list.push({id:c.key,...c.val()}));
+  let list = []; membresSnap.forEach(c=>{list.push({id:c.key,...c.val()});});
   window._membresCache = list;
 
   if(canSeeAll()){
-    let ministeresList = []; minSnap.forEach(c=>ministeresList.push({id:c.key,...c.val()}));
+    let ministeresList = []; minSnap.forEach(c=>{ministeresList.push({id:c.key,...c.val()});});
     ministeresList.sort((a,b)=>(a.nom||'').localeCompare(b.nom||''));
     window._membresMinisteresList = ministeresList;
     if(!_selectedMembresMinistereId && ministeresList.length) _selectedMembresMinistereId = ministeresList[0].id;
@@ -2077,7 +2077,7 @@ async function render_calendrier(){
   const el = document.getElementById('contentArea');
   el.innerHTML = '<div class="empty-state"><p>Chargement…</p></div>';
   const snap = await R('activites').once('value');
-  let list = []; snap.forEach(c=>list.push({id:c.key,...c.val()}));
+  let list = []; snap.forEach(c=>{list.push({id:c.key,...c.val()});});
   if(!canSeeAll()) list = list.filter(a=>a.ministereId===myMinistereId() || a.ministereId==='general');
   window._calActivites = list;
   renderCalendarGrid();
@@ -2114,7 +2114,7 @@ async function render_publications(){
   const el = document.getElementById('contentArea');
   el.innerHTML = '<div class="empty-state"><p>Chargement…</p></div>';
   const snap = await R('publications').once('value');
-  let list = []; snap.forEach(c=>list.push({id:c.key,...c.val()}));
+  let list = []; snap.forEach(c=>{list.push({id:c.key,...c.val()});});
   list.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
 
   el.innerHTML = `
@@ -2192,7 +2192,7 @@ async function render_rencontres(){
   const el = document.getElementById('contentArea');
   el.innerHTML = '<div class="empty-state"><p>Chargement…</p></div>';
   const snap = await R('rencontres').once('value');
-  let list = []; snap.forEach(c=>list.push({id:c.key,...c.val()}));
+  let list = []; snap.forEach(c=>{list.push({id:c.key,...c.val()});});
   list.sort((a,b)=>(a.date||'').localeCompare(b.date||''));
 
   el.innerHTML = `
@@ -2271,7 +2271,7 @@ async function render_journal(){
   if(!isAdmin()){ el.innerHTML = '<div class="empty-state"><p>Accès réservé à l\'administrateur.</p></div>'; return; }
   el.innerHTML = '<div class="empty-state"><p>Chargement…</p></div>';
   const snap = await R('journal').limitToLast(200).once('value');
-  let list = []; snap.forEach(c=>list.push({id:c.key,...c.val()}));
+  let list = []; snap.forEach(c=>{list.push({id:c.key,...c.val()});});
   list.reverse();
   el.innerHTML = `<div class="panel"><div class="table-wrap"><table><thead><tr><th>Date</th><th>Utilisateur</th><th>Action</th><th>Détails</th></tr></thead><tbody>
     ${list.length ? list.map(j=>`<tr><td>${fmtDateTime(new Date(j.ts).toISOString())}</td><td>${esc(j.nom)}</td><td>${esc(j.action)}</td><td>${esc(j.details||'')}</td></tr>`).join('') : `<tr><td colspan="4"><div class="empty-state"><p>Aucune entrée.</p></div></td></tr>`}
@@ -2288,7 +2288,7 @@ async function render_notifications(){
     R('notifications_whatsapp').limitToLast(100).once('value'),
     R('config/whatsappWebhookUrl').once('value')
   ]);
-  let list = []; queueSnap.forEach(c=>list.push({id:c.key,...c.val()}));
+  let list = []; queueSnap.forEach(c=>{list.push({id:c.key,...c.val()});});
   list.reverse();
   const webhookUrl = cfgSnap.val() || '';
   const enAttente = list.filter(n=>n.statut==='en_attente');
@@ -2381,10 +2381,10 @@ async function renderRegistre_accueil(){
     RG('reunions').once('value'), RG('cultes').once('value'), RG('saintesCenes').once('value'), RG('membresBaptises').once('value')
   ]);
   let reunions=[], cultes=[], cenes=[], membresB=[];
-  reunionsSnap.forEach(c=>reunions.push({id:c.key,...c.val()}));
-  cultesSnap.forEach(c=>cultes.push({id:c.key,...c.val()}));
-  cenesSnap.forEach(c=>cenes.push({id:c.key,...c.val()}));
-  membresBSnap.forEach(c=>membresB.push({id:c.key,...c.val()}));
+  reunionsSnap.forEach(c=>{reunions.push({id:c.key,...c.val()});});
+  cultesSnap.forEach(c=>{cultes.push({id:c.key,...c.val()});});
+  cenesSnap.forEach(c=>{cenes.push({id:c.key,...c.val()});});
+  membresBSnap.forEach(c=>{membresB.push({id:c.key,...c.val()});});
 
   const today = new Date().toISOString().slice(0,10);
   const pvEnAttente = reunions.filter(r=>r.statutApprobation!=='approuve');
@@ -2450,7 +2450,7 @@ async function renderRegistre_reunions(){
   const wrap = document.getElementById('registreTabContent');
   wrap.innerHTML = '<div class="empty-state"><p>Chargement…</p></div>';
   const snap = await RG('reunions').once('value');
-  let list = []; snap.forEach(c=>list.push({id:c.key,...c.val()}));
+  let list = []; snap.forEach(c=>{list.push({id:c.key,...c.val()});});
   list.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
 
   wrap.innerHTML = `
@@ -2544,7 +2544,7 @@ async function saveReunion(existingId){
 async function openReunionDetail(id){
   const [rSnap, membresBSnap] = await Promise.all([RG('reunions/'+id).once('value'), RG('membresBaptises').once('value')]);
   const r = {id, ...rSnap.val()};
-  let membresB = []; membresBSnap.forEach(c=>membresB.push({id:c.key,...c.val()}));
+  let membresB = []; membresBSnap.forEach(c=>{membresB.push({id:c.key,...c.val()});});
   const presences = r.presences || {};
   const decisions = r.decisions || [];
   const questions = (r.questionsRaw||'').split('\n').filter(Boolean).map(l=>{
@@ -2592,7 +2592,7 @@ async function openReunionDetail(id){
 
 function openPresenceForm(type, id, presencesExistantes){
   RG('membresBaptises').once('value').then(snap=>{
-    let membresB = []; snap.forEach(c=>membresB.push({id:c.key,...c.val()}));
+    let membresB = []; snap.forEach(c=>{membresB.push({id:c.key,...c.val()});});
     openModal(`
       <div class="modal-head"><h3>Cocher les présences</h3><button class="modal-close" onclick="closeModal()">×</button></div>
       <div class="modal-body">
@@ -2696,7 +2696,7 @@ async function renderRegistre_membresB(){
   const wrap = document.getElementById('registreTabContent');
   wrap.innerHTML = '<div class="empty-state"><p>Chargement…</p></div>';
   const snap = await RG('membresBaptises').once('value');
-  let list = []; snap.forEach(c=>list.push({id:c.key,...c.val()}));
+  let list = []; snap.forEach(c=>{list.push({id:c.key,...c.val()});});
   list.sort((a,b)=>(a.nom||'').localeCompare(b.nom||''));
   window._membresBCache = list;
 
@@ -2865,7 +2865,7 @@ async function renderRegistre_cultes(){
   const wrap = document.getElementById('registreTabContent');
   wrap.innerHTML = '<div class="empty-state"><p>Chargement…</p></div>';
   const snap = await RG('cultes').once('value');
-  let list = []; snap.forEach(c=>list.push({id:c.key,...c.val()}));
+  let list = []; snap.forEach(c=>{list.push({id:c.key,...c.val()});});
   dbg('Lecture cultes : ' + list.length + ' enregistrement(s) trouvé(s) — clés : ' + list.map(c=>c.id).join(', '));
   list.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
 
@@ -2982,7 +2982,7 @@ async function renderRegistre_etudes(){
   const wrap = document.getElementById('registreTabContent');
   wrap.innerHTML = '<div class="empty-state"><p>Chargement…</p></div>';
   const snap = await RG('etudesBibliques').once('value');
-  let list = []; snap.forEach(c=>list.push({id:c.key,...c.val()}));
+  let list = []; snap.forEach(c=>{list.push({id:c.key,...c.val()});});
   list.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
 
   wrap.innerHTML = `
@@ -3068,7 +3068,7 @@ async function renderRegistre_cene(){
   const wrap = document.getElementById('registreTabContent');
   wrap.innerHTML = '<div class="empty-state"><p>Chargement…</p></div>';
   const snap = await RG('saintesCenes').once('value');
-  let list = []; snap.forEach(c=>list.push({id:c.key,...c.val()}));
+  let list = []; snap.forEach(c=>{list.push({id:c.key,...c.val()});});
   dbg('Lecture Sainte-Cène : ' + list.length + ' enregistrement(s) trouvé(s) — clés : ' + list.map(c=>c.id).join(', '));
   list.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
 
@@ -3153,7 +3153,7 @@ async function saveCene(existingId){
 async function openCeneDetail(id){
   const [cSnap, membresBSnap] = await Promise.all([RG('saintesCenes/'+id).once('value'), RG('membresBaptises').once('value')]);
   const c = {id, ...cSnap.val()};
-  let membresB = []; membresBSnap.forEach(x=>membresB.push({id:x.key,...x.val()}));
+  let membresB = []; membresBSnap.forEach(x=>{membresB.push({id:x.key,...x.val()});});
   const presences = c.presences || {};
   const stats = {communie:0, present_non_communie:0, excuse:0, absent:0};
   membresB.forEach(m=>{ const s = presences[m.id] || 'absent'; if(stats[s]!==undefined) stats[s]++; });
@@ -3178,7 +3178,7 @@ async function openCeneDetail(id){
 }
 function openCenePresenceForm(id, presencesExistantes){
   RG('membresBaptises').once('value').then(snap=>{
-    let membresB = []; snap.forEach(c=>membresB.push({id:c.key,...c.val()}));
+    let membresB = []; snap.forEach(c=>{membresB.push({id:c.key,...c.val()});});
     openModal(`
       <div class="modal-head"><h3>Participation à la Sainte-Cène</h3><button class="modal-close" onclick="closeModal()">×</button></div>
       <div class="modal-body">
@@ -3216,7 +3216,7 @@ async function renderRegistre_veillees(){
   const wrap = document.getElementById('registreTabContent');
   wrap.innerHTML = '<div class="empty-state"><p>Chargement…</p></div>';
   const snap = await RG('veillees').once('value');
-  let list = []; snap.forEach(c=>list.push({id:c.key,...c.val()}));
+  let list = []; snap.forEach(c=>{list.push({id:c.key,...c.val()});});
   list.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   wrap.innerHTML = `
     <div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
@@ -3285,7 +3285,7 @@ async function renderRegistre_reveils(){
   const wrap = document.getElementById('registreTabContent');
   wrap.innerHTML = '<div class="empty-state"><p>Chargement…</p></div>';
   const snap = await RG('reveils').once('value');
-  let list = []; snap.forEach(c=>list.push({id:c.key,...c.val()}));
+  let list = []; snap.forEach(c=>{list.push({id:c.key,...c.val()});});
   list.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   wrap.innerHTML = `
     <div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
@@ -3353,7 +3353,7 @@ async function renderRegistre_missions(){
   const wrap = document.getElementById('registreTabContent');
   wrap.innerHTML = '<div class="empty-state"><p>Chargement…</p></div>';
   const snap = await RG('missions').once('value');
-  let list = []; snap.forEach(c=>list.push({id:c.key,...c.val()}));
+  let list = []; snap.forEach(c=>{list.push({id:c.key,...c.val()});});
   list.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   wrap.innerHTML = `
     <div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
