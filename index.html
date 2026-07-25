@@ -220,7 +220,7 @@ tr:hover td{background:rgba(255,255,255,.02);}
 @media print{
   body *{visibility:hidden;}
   #printArea,#printArea *{visibility:visible;}
-  #printArea{position:absolute;top:0;left:0;width:100%;padding:30px;background:#fff;color:#000;}
+  #printArea{display:block !important;position:absolute;top:0;left:0;width:100%;padding:30px;background:#fff;color:#000;}
 }
 
 @media(max-width:900px){
@@ -641,6 +641,7 @@ const NAV_CONFIG = {
       {id:'financements', label:'Financements', icon:'💰'},
       {id:'rapports', label:'Rapports', icon:'📄'},
       {id:'calendrier', label:'Calendrier', icon:'📅'},
+      {id:'registreMinistere', label:'Registres des Ministères', icon:'🗂️'},
     ]},
     {group:'Communication', items:[
       {id:'publications', label:'Publications', icon:'📢'},
@@ -670,6 +671,7 @@ const NAV_CONFIG = {
       {id:'rapports', label:'Rapports', icon:'📄'},
       {id:'ministeres', label:'Ministères', icon:'⛪'},
       {id:'calendrier', label:'Calendrier', icon:'📅'},
+      {id:'registreMinistere', label:'Registres des Ministères', icon:'🗂️'},
     ]},
     {group:'Communication', items:[
       {id:'publications', label:'Publications', icon:'📢'},
@@ -684,6 +686,7 @@ const NAV_CONFIG = {
       {id:'rapports', label:'Rapports', icon:'📄'},
       {id:'membres', label:'Membres & Comité', icon:'👥'},
       {id:'calendrier', label:'Calendrier', icon:'📅'},
+      {id:'registreMinistere', label:'Registre du Ministère', icon:'🗂️'},
     ]},
     {group:'Communication', items:[
       {id:'publications', label:'Publications', icon:'📢'},
@@ -782,7 +785,7 @@ function navTo(view){
     activites:'Activités', financements:'Demandes de financement', rapports:'Rapports d\'activité',
     calendrier:'Calendrier annuel', publications:'Publications', rencontres:'Rencontres', journal:'Journal d\'audit',
     notifications:'Notifications WhatsApp', comptes:'Comptes Pasteur / Administrateur', registre:'Registre Officiel de l\'Église',
-    rapportEglise:'Rapport de l\'Église'};
+    rapportEglise:'Rapport de l\'Église', registreMinistere:'Registre du Ministère'};
   document.getElementById('viewTitle').textContent = titles[view] || view;
   const fn = window['render_'+view];
   if(typeof fn === 'function'){ fn(); } else { document.getElementById('contentArea').innerHTML = '<div class="empty-state"><div class="ic">⚒</div><p>Module en construction.</p></div>'; }
@@ -951,7 +954,7 @@ function statutBadge(statut){
     reportee:['badge-warn','Reportée'], annulee:['badge-danger','Annulée'],
     en_attente:['badge-warn','En attente'], approuve:['badge-ok','Approuvé'], refuse:['badge-danger','Refusé'], retourne:['badge-warn','Retourné'],
     soumis:['badge-warn','Soumis'], actif:['badge-ok','Actif'], suspendu:['badge-danger','Suspendu'], passif:['badge-mute','Passif'],
-    decede:['badge-mute','Décédé'], transfere:['badge-mute','Transféré']
+    decede:['badge-mute','Décédé'], transfere:['badge-mute','Transféré'], mute:['badge-mute','Muté'], ancien_membre:['badge-mute','Ancien membre']
   };
   const [cls,label] = map[statut] || ['badge-mute', statut||'—'];
   return `<span class="badge ${cls}">${label}</span>`;
@@ -2036,7 +2039,7 @@ function openMemberForm(categorie, existing){
       <div class="grid2">
         <div class="field"><label>Date d'entrée</label><input type="date" id="f_mEntree" value="${m.dateEntree||''}"></div>
         <div class="field"><label>Statut</label><select id="f_mStatut">
-          ${['actif','passif','suspendu','decede','transfere'].map(s=>`<option value="${s}" ${m.statut===s?'selected':''}>${s.charAt(0).toUpperCase()+s.slice(1)}</option>`).join('')}
+          ${['actif','passif','suspendu','mute','ancien_membre','decede'].map(s=>`<option value="${s}" ${m.statut===s?'selected':''}>${({actif:'Actif',passif:'Passif',suspendu:'Suspendu',mute:'Muté',ancien_membre:'Ancien membre',decede:'Décédé'})[s]}</option>`).join('')}
         </select></div>
       </div>
       `}
@@ -3604,6 +3607,674 @@ async function openRapportEgliseDetail(type, id){
       <button class="btn btn-gold btn-sm" onclick="closeModal()">Fermer</button>
     </div>
   `);
+}
+
+/* ====================== REGISTRE DU MINISTÈRE ====================== */
+const RM = (ministereId, path) => R('registreMinistere/'+ministereId+'/'+path);
+
+const RM_TABS = [
+  {id:'historique', label:'Historique'},
+  {id:'fonctionnement', label:'Fonctionnement'},
+  {id:'documents', label:'Documents officiels'},
+  {id:'reunionsInternes', label:'Réunions internes'},
+  {id:'comite', label:'Comité'},
+  {id:'activitesRegulieres', label:'Activités régulières'},
+  {id:'financesMinistere', label:'Finances'},
+  {id:'criteres', label:'Critères administratifs'},
+  {id:'chronologie', label:'Historique administratif'},
+  {id:'rechercheMinistere', label:'Recherche'},
+];
+let _rmTab = 'historique';
+let _rmMinistereId = null; // ministère actuellement consulté
+
+async function render_registreMinistere(){
+  const el = document.getElementById('contentArea');
+  if(isResponsable()){
+    _rmMinistereId = myMinistereId();
+    renderRMShell();
+    return;
+  }
+  // Admin / Pasteur : sélecteur de ministère
+  el.innerHTML = '<div class="empty-state"><p>Chargement…</p></div>';
+  const minSnap = await R('ministeres').once('value');
+  let ministeresList = []; minSnap.forEach(c=>{ ministeresList.push({id:c.key,...c.val()}); });
+  ministeresList.sort((a,b)=>(a.nom||'').localeCompare(b.nom||''));
+  window._rmMinisteresList = ministeresList;
+  if(!ministeresList.length){ el.innerHTML = `<div class="empty-state"><div class="ic">⛪</div><p>Aucun ministère créé pour le moment.</p></div>`; return; }
+  if(!_rmMinistereId) _rmMinistereId = ministeresList[0].id;
+
+  el.innerHTML = `
+    <div class="panel" style="margin-bottom:16px;">
+      <div class="panel-head"><h3>Choisir un ministère</h3></div>
+      <div class="tag-row" id="rmMinistereRow">
+        ${ministeresList.map(m=>`<span class="tag-filter ${m.id===_rmMinistereId?'active':''}" onclick="selectRMMinistere('${m.id}')">${esc(m.nom)}</span>`).join('')}
+      </div>
+    </div>
+    <div id="rmShellWrap"></div>
+  `;
+  renderRMShell();
+}
+function selectRMMinistere(id){
+  _rmMinistereId = id;
+  document.querySelectorAll('#rmMinistereRow .tag-filter').forEach(t=>t.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+  renderRMShell();
+}
+function renderRMShell(){
+  const wrapId = canSeeAll() ? 'rmShellWrap' : 'contentArea';
+  const wrap = document.getElementById(wrapId);
+  if(!wrap) return;
+  wrap.innerHTML = `
+    <div class="tag-row" id="rmTabRow" style="margin-bottom:16px;">
+      ${RM_TABS.map(t=>`<span class="tag-filter ${t.id===_rmTab?'active':''}" onclick="switchRMTab('${t.id}')">${t.label}</span>`).join('')}
+    </div>
+    <div id="rmTabContent"></div>
+  `;
+  renderRMTabContent();
+}
+function switchRMTab(tab){
+  _rmTab = tab;
+  document.querySelectorAll('#rmTabRow .tag-filter').forEach((t,i)=>t.classList.toggle('active', RM_TABS[i].id===tab));
+  renderRMTabContent();
+}
+function renderRMTabContent(){
+  const fn = window['renderRM_'+_rmTab];
+  if(typeof fn === 'function') fn();
+}
+function rmCanManage(){
+  // Seul le responsable du ministère consulté peut modifier son propre registre
+  return isResponsable() && myMinistereId() === _rmMinistereId;
+}
+
+/* ---------- Historique du ministère ---------- */
+async function renderRM_historique(){
+  const wrap = document.getElementById('rmTabContent');
+  wrap.innerHTML = '<div class="empty-state"><p>Chargement…</p></div>';
+  const snap = await RM(_rmMinistereId, 'historique').once('value');
+  const h = snap.val() || {};
+  const champs = [
+    ['dateCreation','Date de création','date'],['circonstances','Circonstances de création','textarea'],
+    ['vision','Vision','textarea'],['mission','Mission','textarea'],['valeurs','Valeurs','textarea'],
+    ['objectifsGeneraux','Objectifs généraux','textarea'],['objectifsSpecifiques','Objectifs spécifiques','textarea'],
+    ['verset','Verset biblique du ministère','text'],['devise','Devise','text'],
+    ['evenementsMarquants','Événements marquants','textarea'],['realisations','Grandes réalisations','textarea'],
+    ['difficultes','Difficultés rencontrées','textarea'],['temoignages','Témoignages','textarea'],
+  ];
+  wrap.innerHTML = `
+    <div class="panel">
+      <div class="panel-head"><h3>Historique officiel du ministère</h3></div>
+      ${rmCanManage() ? champs.map(([key,label,type])=>`
+        <div class="field"><label>${label}</label>${type==='textarea'?`<textarea id="rmh_${key}">${esc(h[key]||'')}</textarea>`:`<input type="${type}" id="rmh_${key}" value="${esc(h[key]||'')}">`}</div>
+      `).join('') + `<button class="btn btn-gold" onclick="saveRMHistorique()">Enregistrer</button>`
+      : champs.map(([key,label])=> h[key] ? `<p style="font-size:12.5px;color:var(--ink-dim);margin:0 0 10px;"><b style="color:var(--ink);">${label} :</b> ${key==='dateCreation'?fmtDate(h[key]):esc(h[key])}</p>` : '').join('') || `<div class="empty-state"><p>Aucun historique enregistré.</p></div>`}
+    </div>
+  `;
+}
+async function saveRMHistorique(){
+  const champs = ['dateCreation','circonstances','vision','mission','valeurs','objectifsGeneraux','objectifsSpecifiques','verset','devise','evenementsMarquants','realisations','difficultes','temoignages'];
+  const data = {};
+  champs.forEach(k=>{ const el = document.getElementById('rmh_'+k); if(el) data[k] = el.value.trim(); });
+  await RM(_rmMinistereId, 'historique').update(data);
+  logAction('Mise à jour historique du ministère', _rmMinistereId);
+  toast('Historique enregistré.','ok');
+  renderRM_historique();
+}
+
+/* ---------- Fonctionnement du ministère (avec versionnage) ---------- */
+async function renderRM_fonctionnement(){
+  const wrap = document.getElementById('rmTabContent');
+  wrap.innerHTML = '<div class="empty-state"><p>Chargement…</p></div>';
+  const snap = await RM(_rmMinistereId, 'fonctionnement').once('value');
+  const f = snap.val() || {};
+  const versions = f.versions || [];
+  const champs = [
+    ['modeFonctionnement','Mode de fonctionnement'],['organisationInterne','Organisation interne'],
+    ['organigramme','Organigramme'],['responsabilitesPostes','Responsabilités de chaque poste'],
+    ['proceduresAdministratives','Procédures administratives'],['proceduresDecisionnelles','Procédures décisionnelles'],
+    ['proceduresDisciplinaires','Procédures disciplinaires'],['processusActivites',"Processus d'organisation des activités"],
+    ['processusValidation','Processus de validation des décisions'],
+  ];
+  wrap.innerHTML = `
+    <div class="panel">
+      <div class="panel-head"><h3>Fonctionnement du ministère</h3><span class="panel-sub">${versions.length} version(s) archivée(s)</span></div>
+      ${rmCanManage() ? champs.map(([key,label])=>`
+        <div class="field"><label>${label}</label><textarea id="rmf_${key}">${esc(f[key]||'')}</textarea></div>
+      `).join('') + `<button class="btn btn-gold" onclick="saveRMFonctionnement()">Enregistrer (archive la version précédente)</button>`
+      : champs.map(([key,label])=> f[key] ? `<p style="font-size:12.5px;color:var(--ink-dim);margin:0 0 10px;"><b style="color:var(--ink);">${label} :</b> ${esc(f[key])}</p>` : '').join('') || `<div class="empty-state"><p>Aucune documentation enregistrée.</p></div>`}
+    </div>
+    ${versions.length ? `<div class="panel">
+      <div class="panel-head"><h3>Versions précédentes</h3></div>
+      ${versions.slice().reverse().map(v=>`<div style="padding:8px 0;border-bottom:1px solid var(--navy-border);font-size:12px;color:var(--ink-faint);">Version du ${fmtDateTime(new Date(v.dateArchivage).toISOString())} — <span style="cursor:pointer;color:var(--gold-bright);text-decoration:underline;" onclick='viewRMFonctionnementVersion(${JSON.stringify(v).replace(/'/g,"&#39;")})'>voir le contenu</span></div>`).join('')}
+    </div>` : ''}
+  `;
+}
+function viewRMFonctionnementVersion(v){
+  const champs = [['modeFonctionnement','Mode de fonctionnement'],['organisationInterne','Organisation interne'],['organigramme','Organigramme'],['responsabilitesPostes','Responsabilités de chaque poste'],['proceduresAdministratives','Procédures administratives'],['proceduresDecisionnelles','Procédures décisionnelles'],['proceduresDisciplinaires','Procédures disciplinaires'],['processusActivites',"Processus d'organisation des activités"],['processusValidation','Processus de validation des décisions']];
+  openModal(`
+    <div class="modal-head"><h3>Version du ${fmtDateTime(new Date(v.dateArchivage).toISOString())}</h3><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      ${champs.map(([key,label])=> v[key] ? `<p style="font-size:12.5px;color:var(--ink-dim);margin:0 0 10px;"><b style="color:var(--ink);">${label} :</b> ${esc(v[key])}</p>` : '').join('') || `<p style="font-size:12.5px;color:var(--ink-faint);">Version vide.</p>`}
+    </div>
+    <div class="modal-foot"><button class="btn btn-gold" onclick="closeModal()">Fermer</button></div>
+  `);
+}
+async function saveRMFonctionnement(){
+  const champs = ['modeFonctionnement','organisationInterne','organigramme','responsabilitesPostes','proceduresAdministratives','proceduresDecisionnelles','proceduresDisciplinaires','processusActivites','processusValidation'];
+  const snap = await RM(_rmMinistereId, 'fonctionnement').once('value');
+  const ancien = snap.val() || {};
+  const versions = ancien.versions || [];
+  // Archive l'ancienne version avant d'écraser (aucune perte d'historique)
+  const ancienneVersion = {};
+  let aDuContenu = false;
+  champs.forEach(k=>{ if(ancien[k]){ ancienneVersion[k]=ancien[k]; aDuContenu = true; } });
+  if(aDuContenu){ ancienneVersion.dateArchivage = Date.now(); versions.push(ancienneVersion); }
+
+  const data = { versions };
+  champs.forEach(k=>{ const el = document.getElementById('rmf_'+k); if(el) data[k] = el.value.trim(); });
+  await RM(_rmMinistereId, 'fonctionnement').set(data);
+  logAction('Mise à jour fonctionnement du ministère', _rmMinistereId);
+  toast('Fonctionnement enregistré, ancienne version archivée.','ok');
+  renderRM_fonctionnement();
+}
+
+/* ---------- Documents officiels (texte collé/tapé, avec versions) ---------- */
+const CATEGORIES_DOCUMENT = ['Règlement interne','Charte','Constitution','Guide','Procédure','Manuel de fonctionnement','Note administrative','Directive pastorale','Autre'];
+async function renderRM_documents(){
+  const wrap = document.getElementById('rmTabContent');
+  wrap.innerHTML = '<div class="empty-state"><p>Chargement…</p></div>';
+  const snap = await RM(_rmMinistereId, 'documents').once('value');
+  let list = []; snap.forEach(c=>{ list.push({id:c.key,...c.val()}); });
+  list.sort((a,b)=>(b.dateModification||b.dateAjout||0)-(a.dateModification||a.dateAjout||0));
+
+  wrap.innerHTML = `
+    ${rmCanManage()?`<div style="display:flex;justify-content:flex-end;margin-bottom:14px;"><button class="btn btn-gold" onclick="openRMDocumentForm()">+ Nouveau document</button></div>`:''}
+    ${list.length ? list.map(d=>`<div class="panel">
+      <div style="display:flex;justify-content:space-between;align-items:start;">
+        <div>
+          <span class="badge badge-gold">${esc(d.categorie||'Document')}</span>
+          <h3 style="margin:8px 0 4px;font-size:15px;">${esc(d.titre)}</h3>
+          <div style="font-size:11px;color:var(--ink-faint);">v${(d.versions?d.versions.length:0)+1} · ${fmtDate((d.dateModification||d.dateAjout||Date.now())&&new Date(d.dateModification||d.dateAjout).toISOString().slice(0,10))} · ajouté par ${esc(d.ajoutePar||'—')}</div>
+        </div>
+        ${rmCanManage()?`<button class="btn btn-ghost btn-sm" onclick='openRMDocumentForm(${JSON.stringify(d).replace(/'/g,"&#39;")})'>✏️</button>`:''}
+      </div>
+      <p style="font-size:12.5px;color:var(--ink-dim);margin-top:10px;white-space:pre-wrap;">${esc((d.contenu||'').slice(0,300))}${(d.contenu||'').length>300?'…':''}</p>
+      ${d.versions&&d.versions.length?`<div style="font-size:11px;color:var(--ink-faint);margin-top:8px;cursor:pointer;text-decoration:underline;" onclick='viewRMDocumentVersions(${JSON.stringify(d).replace(/'/g,"&#39;")})'>Voir ${d.versions.length} version(s) précédente(s)</div>`:''}
+    </div>`).join('') : `<div class="empty-state"><div class="ic">📄</div><p>Aucun document enregistré.</p></div>`}
+  `;
+}
+function openRMDocumentForm(existing){
+  const d = existing || {};
+  openModal(`
+    <div class="modal-head"><h3>${existing?'Modifier le':'Nouveau'} document</h3><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Titre</label><input id="rmd_titre" value="${esc(d.titre||'')}"></div>
+      <div class="field"><label>Catégorie</label><select id="rmd_categorie">${CATEGORIES_DOCUMENT.map(c=>`<option ${d.categorie===c?'selected':''}>${c}</option>`).join('')}</select></div>
+      <div class="field"><label>Contenu (texte collé ou tapé)</label><textarea id="rmd_contenu" style="min-height:200px;">${esc(d.contenu||'')}</textarea></div>
+      ${existing?'<div class="helper">Enregistrer créera une nouvelle version ; l\'ancien contenu sera archivé, pas perdu.</div>':''}
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-gold" onclick="saveRMDocument(${existing?`'${d.id}'`:'null'})">Enregistrer</button>
+    </div>
+  `);
+}
+async function saveRMDocument(existingId){
+  const titre = document.getElementById('rmd_titre').value.trim();
+  const categorie = document.getElementById('rmd_categorie').value;
+  const contenu = document.getElementById('rmd_contenu').value.trim();
+  if(!titre){ toast('Le titre est obligatoire.','err'); return; }
+
+  if(existingId){
+    const snap = await RM(_rmMinistereId, 'documents/'+existingId).once('value');
+    const ancien = snap.val() || {};
+    const versions = ancien.versions || [];
+    if(ancien.contenu){ versions.push({contenu:ancien.contenu, titre:ancien.titre, dateArchivage:Date.now()}); }
+    await RM(_rmMinistereId, 'documents/'+existingId).set({ titre, categorie, contenu, versions, ajoutePar: ancien.ajoutePar||currentProfile.nom, dateAjout: ancien.dateAjout||Date.now(), dateModification: Date.now() });
+    logAction('Modification document (nouvelle version)', titre);
+  } else {
+    await RM(_rmMinistereId, 'documents').push({ titre, categorie, contenu, versions:[], ajoutePar: currentProfile.nom, dateAjout: Date.now() });
+    logAction('Nouveau document officiel', titre);
+  }
+  toast('Document enregistré.','ok');
+  closeModal();
+  renderRM_documents();
+}
+function viewRMDocumentVersions(d){
+  openModal(`
+    <div class="modal-head"><h3>Historique des versions — ${esc(d.titre)}</h3><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      ${d.versions.slice().reverse().map(v=>`<div class="panel"><div style="font-size:11px;color:var(--ink-faint);margin-bottom:6px;">${fmtDateTime(new Date(v.dateArchivage).toISOString())}</div><p style="font-size:12.5px;color:var(--ink-dim);white-space:pre-wrap;">${esc(v.contenu)}</p></div>`).join('')}
+    </div>
+    <div class="modal-foot"><button class="btn btn-gold" onclick="closeModal()">Fermer</button></div>
+  `);
+}
+
+/* ---------- Réunions internes (CONFIDENTIELLES — même le pasteur/admin ne voit que la méta) ---------- */
+const TYPES_REUNION_INTERNE = ['Réunion ordinaire','Réunion extraordinaire','Réunion du comité','Réunion stratégique'];
+async function renderRM_reunionsInternes(){
+  const wrap = document.getElementById('rmTabContent');
+  wrap.innerHTML = '<div class="empty-state"><p>Chargement…</p></div>';
+  const metaSnap = await RM(_rmMinistereId, 'reunionsMeta').once('value');
+  let list = []; metaSnap.forEach(c=>{ list.push({id:c.key,...c.val()}); });
+  list.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  const acces = rmCanManage();
+
+  wrap.innerHTML = `
+    ${!acces?`<div class="panel" style="background:rgba(212,175,55,.06);border-color:rgba(212,175,55,.3);"><p style="font-size:12px;color:var(--ink-dim);margin:0;">🔒 Le contenu détaillé des réunions internes est confidentiel et réservé au responsable du ministère. Seules la date, le type et le statut sont visibles ici.</p></div>`:''}
+    ${acces?`<div style="display:flex;justify-content:flex-end;margin:14px 0;"><button class="btn btn-gold" onclick="openRMReunionForm()">+ Nouvelle réunion interne</button></div>`:''}
+    <div class="panel"><div class="table-wrap"><table><thead><tr><th>Type</th><th>Date</th><th>Statut</th><th></th></tr></thead><tbody>
+      ${list.length ? list.map(r=>`<tr ${acces?`style="cursor:pointer;" onclick="openRMReunionDetail('${r.id}')"`:''}>
+        <td><b style="color:var(--ink);">${esc(r.type||'—')}</b></td>
+        <td>${fmtDate(r.date)}</td>
+        <td>${statutBadge(r.statut||'terminee')}</td>
+        <td>${acces?'›':''}</td>
+      </tr>`).join('') : `<tr><td colspan="4"><div class="empty-state"><p>Aucune réunion interne enregistrée.</p></div></td></tr>`}
+    </tbody></table></div></div>
+  `;
+}
+function openRMReunionForm(existing){
+  const r = existing || {};
+  openModal(`
+    <div class="modal-head"><h3>${existing?'Modifier la':'Nouvelle'} réunion interne</h3><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="grid2">
+        <div class="field"><label>Type</label><select id="rmr_type">${TYPES_REUNION_INTERNE.map(t=>`<option ${r.type===t?'selected':''}>${t}</option>`).join('')}</select></div>
+        <div class="field"><label>Date</label><input type="date" id="rmr_date" value="${r.date||''}"></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>Heure</label><input type="time" id="rmr_heure" value="${r.heure||''}"></div>
+        <div class="field"><label>Lieu</label><input id="rmr_lieu" value="${esc(r.lieu||'')}"></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>Président</label><input id="rmr_president" value="${esc(r.president||'')}"></div>
+        <div class="field"><label>Secrétaire</label><input id="rmr_secretaire" value="${esc(r.secretaire||'')}"></div>
+      </div>
+      <div class="field"><label>Participants (liste de présence, un par ligne)</label><textarea id="rmr_participants">${esc(r.participants||'')}</textarea></div>
+      <div class="field"><label>Ordre du jour</label><textarea id="rmr_ordreJour">${esc(r.ordreJour||'')}</textarea></div>
+      <div class="field"><label>Déroulement / discussions</label><textarea id="rmr_deroulement">${esc(r.deroulement||'')}</textarea></div>
+      <div class="field"><label>Interventions / questions / réponses</label><textarea id="rmr_interventions">${esc(r.interventions||'')}</textarea></div>
+      <div class="field"><label>Décisions</label><textarea id="rmr_decisions">${esc(r.decisions||'')}</textarea></div>
+      <div class="field"><label>Recommandations</label><textarea id="rmr_recommandations">${esc(r.recommandations||'')}</textarea></div>
+      <div class="field"><label>Observations</label><textarea id="rmr_observations">${esc(r.observations||'')}</textarea></div>
+      <div class="field"><label>Prochaine réunion</label><input type="date" id="rmr_prochaine" value="${r.prochaineReunion||''}"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-gold" onclick="saveRMReunion(${existing?`'${r.id}'`:'null'})">Enregistrer</button>
+    </div>
+  `);
+}
+async function saveRMReunion(existingId){
+  const type = document.getElementById('rmr_type').value;
+  const date = document.getElementById('rmr_date').value;
+  if(!date){ toast('La date est obligatoire.','err'); return; }
+  const detail = {
+    type, date, heure: document.getElementById('rmr_heure').value, lieu: document.getElementById('rmr_lieu').value.trim(),
+    president: document.getElementById('rmr_president').value.trim(), secretaire: document.getElementById('rmr_secretaire').value.trim(),
+    participants: document.getElementById('rmr_participants').value.trim(), ordreJour: document.getElementById('rmr_ordreJour').value.trim(),
+    deroulement: document.getElementById('rmr_deroulement').value.trim(), interventions: document.getElementById('rmr_interventions').value.trim(),
+    decisions: document.getElementById('rmr_decisions').value.trim(), recommandations: document.getElementById('rmr_recommandations').value.trim(),
+    observations: document.getElementById('rmr_observations').value.trim(), prochaineReunion: document.getElementById('rmr_prochaine').value,
+  };
+  const meta = { type, date, statut:'terminee' };
+  if(existingId){
+    await RM(_rmMinistereId, 'reunionsMeta/'+existingId).update(meta);
+    await RM(_rmMinistereId, 'reunionsDetail/'+existingId).update(detail);
+    logAction('Modification réunion interne', type);
+  } else {
+    const ref = await RM(_rmMinistereId, 'reunionsMeta').push(meta);
+    await RM(_rmMinistereId, 'reunionsDetail/'+ref.key).set(detail);
+    logAction('Nouvelle réunion interne', type);
+  }
+  toast('Réunion enregistrée.','ok');
+  closeModal();
+  renderRM_reunionsInternes();
+}
+async function openRMReunionDetail(id){
+  const snap = await RM(_rmMinistereId, 'reunionsDetail/'+id).once('value');
+  const r = snap.val();
+  if(!r){ toast('Détail introuvable.','err'); return; }
+  openModal(`
+    <div class="modal-head"><h3>${esc(r.type)} — ${fmtDate(r.date)}</h3><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <p style="font-size:12.5px;color:var(--ink-dim);"><b style="color:var(--ink);">Lieu :</b> ${esc(r.lieu||'—')} · <b style="color:var(--ink);">Heure :</b> ${r.heure||'—'}</p>
+      <p style="font-size:12.5px;color:var(--ink-dim);"><b style="color:var(--ink);">Président :</b> ${esc(r.president||'—')} · <b style="color:var(--ink);">Secrétaire :</b> ${esc(r.secretaire||'—')}</p>
+      ${r.participants?`<p style="font-size:12.5px;color:var(--ink-dim);"><b style="color:var(--ink);">Participants :</b><br>${esc(r.participants).replace(/\n/g,'<br>')}</p>`:''}
+      ${r.ordreJour?`<p style="font-size:12.5px;color:var(--ink-dim);"><b style="color:var(--ink);">Ordre du jour :</b><br>${esc(r.ordreJour).replace(/\n/g,'<br>')}</p>`:''}
+      ${r.deroulement?`<p style="font-size:12.5px;color:var(--ink-dim);"><b style="color:var(--ink);">Déroulement :</b> ${esc(r.deroulement)}</p>`:''}
+      ${r.interventions?`<p style="font-size:12.5px;color:var(--ink-dim);"><b style="color:var(--ink);">Interventions :</b> ${esc(r.interventions)}</p>`:''}
+      ${r.decisions?`<p style="font-size:12.5px;color:var(--ink-dim);"><b style="color:var(--ink);">Décisions :</b> ${esc(r.decisions)}</p>`:''}
+      ${r.recommandations?`<p style="font-size:12.5px;color:var(--ink-dim);"><b style="color:var(--ink);">Recommandations :</b> ${esc(r.recommandations)}</p>`:''}
+      ${r.observations?`<p style="font-size:12.5px;color:var(--ink-dim);"><b style="color:var(--ink);">Observations :</b> ${esc(r.observations)}</p>`:''}
+      ${r.prochaineReunion?`<p style="font-size:12.5px;color:var(--ink-dim);"><b style="color:var(--ink);">Prochaine réunion :</b> ${fmtDate(r.prochaineReunion)}</p>`:''}
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost btn-sm" onclick='closeModal();openRMReunionForm(Object.assign({id:"${id}"},${JSON.stringify(r).replace(/'/g,"&#39;")}))'>✏️ Modifier</button>
+      <button class="btn btn-gold btn-sm" onclick="closeModal()">Fermer</button>
+    </div>
+  `);
+}
+
+/* ---------- Comité (jamais supprimé, archivage automatique) ---------- */
+const MOTIFS_FIN_MANDAT = ['Fin de mandat','Changement de poste','Mutation','Suspension','Abandon','Démission','Décès','Révocation','Autre'];
+function dureeMandat(debut, fin){
+  if(!debut) return '—';
+  const d1 = new Date(debut), d2 = fin ? new Date(fin) : new Date();
+  let jours = Math.round((d2-d1)/86400000);
+  if(jours<0) return '—';
+  const annees = Math.floor(jours/365); jours -= annees*365;
+  const mois = Math.floor(jours/30); jours -= mois*30;
+  const semaines = Math.floor(jours/7); jours -= semaines*7;
+  const parts = [];
+  if(annees) parts.push(annees+' an'+(annees>1?'s':''));
+  if(mois) parts.push(mois+' mois');
+  if(semaines) parts.push(semaines+' sem.');
+  if(jours) parts.push(jours+' j');
+  return parts.length ? parts.join(' ') : '0 j';
+}
+async function renderRM_comite(){
+  const wrap = document.getElementById('rmTabContent');
+  wrap.innerHTML = '<div class="empty-state"><p>Chargement…</p></div>';
+  const snap = await RM(_rmMinistereId, 'comiteMembres').once('value');
+  let list = []; snap.forEach(c=>{ list.push({id:c.key,...c.val()}); });
+  const actuels = list.filter(m=>!m.dateFin);
+  const archives = list.filter(m=>m.dateFin).sort((a,b)=>(b.dateFin||'').localeCompare(a.dateFin||''));
+
+  wrap.innerHTML = `
+    ${rmCanManage()?`<div style="display:flex;justify-content:flex-end;margin-bottom:14px;"><button class="btn btn-gold" onclick="openRMComiteForm()">+ Nommer un membre du comité</button></div>`:''}
+    <div class="panel">
+      <div class="panel-head"><h3>Comité actuel (${actuels.length})</h3></div>
+      ${actuels.length ? `<div class="table-wrap"><table><thead><tr><th>Nom</th><th>Poste</th><th>Depuis</th><th>Durée</th><th></th></tr></thead><tbody>
+        ${actuels.map(m=>`<tr><td><b style="color:var(--ink);">${esc(m.nom)}</b></td><td>${esc(m.poste)}</td><td>${fmtDate(m.dateNomination)}</td><td>${dureeMandat(m.dateNomination,null)}</td>
+        <td>${rmCanManage()?`<button class="btn btn-ghost btn-sm" onclick='openRMFinMandatForm(${JSON.stringify(m).replace(/'/g,"&#39;")})'>Fin de fonction</button>`:''}</td></tr>`).join('')}
+      </tbody></table></div>` : `<div class="empty-state"><p>Aucun membre de comité actif.</p></div>`}
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h3>Comités archivés (${archives.length})</h3></div>
+      ${archives.length ? `<div class="table-wrap"><table><thead><tr><th>Nom</th><th>Poste</th><th>Période</th><th>Durée</th><th>Motif</th></tr></thead><tbody>
+        ${archives.map(m=>`<tr><td>${esc(m.nom)}</td><td>${esc(m.poste)}</td><td>${fmtDate(m.dateNomination)} → ${fmtDate(m.dateFin)}</td><td>${dureeMandat(m.dateNomination,m.dateFin)}</td><td>${esc(m.motifFin||'—')}</td></tr>`).join('')}
+      </tbody></table></div>` : `<div class="empty-state"><p>Aucun ancien membre archivé.</p></div>`}
+    </div>
+  `;
+}
+function openRMComiteForm(){
+  openModal(`
+    <div class="modal-head"><h3>Nommer un membre du comité</h3><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Nom complet</label><input id="rmc_nom"></div>
+      <div class="field"><label>Poste</label><input id="rmc_poste" placeholder="Ex: Trésorier, Secrétaire..."></div>
+      <div class="field"><label>Date de nomination</label><input type="date" id="rmc_dateNomination" value="${new Date().toISOString().slice(0,10)}"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-gold" onclick="saveRMComiteMembre()">Nommer</button>
+    </div>
+  `);
+}
+async function saveRMComiteMembre(){
+  const nom = document.getElementById('rmc_nom').value.trim();
+  const poste = document.getElementById('rmc_poste').value.trim();
+  const dateNomination = document.getElementById('rmc_dateNomination').value;
+  if(!nom || !dateNomination){ toast('Le nom et la date sont obligatoires.','err'); return; }
+  await RM(_rmMinistereId, 'comiteMembres').push({ nom, poste, dateNomination, createdAt: Date.now() });
+  logAction('Nomination comité', nom+' — '+poste);
+  toast('Membre nommé.','ok');
+  closeModal();
+  renderRM_comite();
+}
+function openRMFinMandatForm(m){
+  openModal(`
+    <div class="modal-head"><h3>Fin de fonction — ${esc(m.nom)}</h3><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Date de fin de fonction</label><input type="date" id="rmc_dateFin" value="${new Date().toISOString().slice(0,10)}"></div>
+      <div class="field"><label>Motif</label><select id="rmc_motif">${MOTIFS_FIN_MANDAT.map(mo=>`<option>${mo}</option>`).join('')}</select></div>
+      <div class="field"><label>Précision (si "Autre")</label><input id="rmc_motifPrecision"></div>
+      <div class="helper">Ce membre restera archivé dans l'historique du comité — jamais supprimé.</div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-gold" onclick="saveRMFinMandat('${m.id}')">Confirmer la fin de fonction</button>
+    </div>
+  `);
+}
+async function saveRMFinMandat(id){
+  const dateFin = document.getElementById('rmc_dateFin').value;
+  let motif = document.getElementById('rmc_motif').value;
+  const precision = document.getElementById('rmc_motifPrecision').value.trim();
+  if(motif==='Autre' && precision) motif = 'Autre : '+precision;
+  await RM(_rmMinistereId, 'comiteMembres/'+id).update({ dateFin, motifFin: motif });
+  logAction('Fin de fonction comité', id+' — '+motif);
+  toast('Membre archivé.','ok');
+  closeModal();
+  renderRM_comite();
+}
+
+/* ---------- Activités régulières ---------- */
+const TYPES_ACTIVITE_REGULIERE = ['Réunion hebdomadaire','Réunion mensuelle','Horaire de prière','Horaire de visite','Activité permanente','Activité annuelle','Activité spéciale'];
+async function renderRM_activitesRegulieres(){
+  const wrap = document.getElementById('rmTabContent');
+  wrap.innerHTML = '<div class="empty-state"><p>Chargement…</p></div>';
+  const snap = await RM(_rmMinistereId, 'activitesRegulieres').once('value');
+  let list = []; snap.forEach(c=>{ list.push({id:c.key,...c.val()}); });
+
+  wrap.innerHTML = `
+    ${rmCanManage()?`<div style="display:flex;justify-content:flex-end;margin-bottom:14px;"><button class="btn btn-gold" onclick="openRMActiviteRegForm()">+ Nouvelle activité régulière</button></div>`:''}
+    <div class="panel"><div class="table-wrap"><table><thead><tr><th>Nom</th><th>Type</th><th>Fréquence</th><th>Lieu</th><th></th></tr></thead><tbody>
+      ${list.length ? list.map(a=>`<tr><td><b style="color:var(--ink);">${esc(a.nom)}</b></td><td>${esc(a.type)}</td><td>${esc(a.frequence||'—')}</td><td>${esc(a.lieu||'—')}</td>
+      <td>${rmCanManage()?`<button class="btn btn-ghost btn-sm" onclick='openRMActiviteRegForm(${JSON.stringify(a).replace(/'/g,"&#39;")})'>✏️</button>`:''}</td></tr>`).join('') : `<tr><td colspan="5"><div class="empty-state"><p>Aucune activité régulière enregistrée.</p></div></td></tr>`}
+    </tbody></table></div></div>
+  `;
+}
+function openRMActiviteRegForm(existing){
+  const a = existing || {};
+  openModal(`
+    <div class="modal-head"><h3>${existing?'Modifier l\'':'Nouvelle '}activité régulière</h3><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Nom</label><input id="rmar_nom" value="${esc(a.nom||'')}"></div>
+      <div class="field"><label>Type</label><select id="rmar_type">${TYPES_ACTIVITE_REGULIERE.map(t=>`<option ${a.type===t?'selected':''}>${t}</option>`).join('')}</select></div>
+      <div class="field"><label>Fréquence / jour / heure</label><input id="rmar_frequence" placeholder="Ex: Tous les mardis à 18h" value="${esc(a.frequence||'')}"></div>
+      <div class="field"><label>Lieu</label><input id="rmar_lieu" value="${esc(a.lieu||'')}"></div>
+      <div class="field"><label>Description</label><textarea id="rmar_description">${esc(a.description||'')}</textarea></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-gold" onclick="saveRMActiviteReg(${existing?`'${a.id}'`:'null'})">Enregistrer</button>
+    </div>
+  `);
+}
+async function saveRMActiviteReg(existingId){
+  const data = {
+    nom: document.getElementById('rmar_nom').value.trim(), type: document.getElementById('rmar_type').value,
+    frequence: document.getElementById('rmar_frequence').value.trim(), lieu: document.getElementById('rmar_lieu').value.trim(),
+    description: document.getElementById('rmar_description').value.trim(),
+  };
+  if(!data.nom){ toast('Le nom est obligatoire.','err'); return; }
+  if(existingId){ await RM(_rmMinistereId, 'activitesRegulieres/'+existingId).update(data); }
+  else { data.createdAt = Date.now(); await RM(_rmMinistereId, 'activitesRegulieres').push(data); }
+  logAction('Activité régulière enregistrée', data.nom);
+  toast('Enregistré.','ok');
+  closeModal();
+  renderRM_activitesRegulieres();
+}
+
+/* ---------- Finances du ministère ---------- */
+async function renderRM_financesMinistere(){
+  const wrap = document.getElementById('rmTabContent');
+  wrap.innerHTML = '<div class="empty-state"><p>Chargement…</p></div>';
+  const [eSnap, dSnap] = await Promise.all([RM(_rmMinistereId, 'financesEntrees').once('value'), RM(_rmMinistereId, 'financesDepenses').once('value')]);
+  let entrees = []; eSnap.forEach(c=>{ entrees.push({id:c.key,...c.val()}); });
+  let depenses = []; dSnap.forEach(c=>{ depenses.push({id:c.key,...c.val()}); });
+  entrees.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  depenses.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  const totalEntrees = entrees.reduce((s,e)=>s+(Number(e.montant)||0),0);
+  const totalDepenses = depenses.reduce((s,d)=>s+(Number(d.montant)||0),0);
+
+  wrap.innerHTML = `
+    <div class="stat-grid">
+      <div class="stat-card"><div class="num">${fmtMoney(totalEntrees)}</div><div class="lbl">Total entrées</div></div>
+      <div class="stat-card"><div class="num">${fmtMoney(totalDepenses)}</div><div class="lbl">Total dépenses</div></div>
+      <div class="stat-card"><div class="num">${fmtMoney(totalEntrees-totalDepenses)}</div><div class="lbl">Solde</div></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h3>Entrées</h3>${rmCanManage()?`<button class="btn btn-gold btn-sm" onclick="openRMFinanceForm('entrees')">+ Entrée</button>`:''}</div>
+      ${entrees.length?`<div class="table-wrap"><table><thead><tr><th>Date</th><th>Montant</th><th>Provenance</th><th>Donateur</th></tr></thead><tbody>
+        ${entrees.map(e=>`<tr><td>${fmtDate(e.date)}</td><td>${fmtMoney(e.montant)}</td><td>${esc(e.provenance||'—')}</td><td>${esc(e.donateur||'—')}</td></tr>`).join('')}
+      </tbody></table></div>`:`<div class="empty-state"><p>Aucune entrée enregistrée.</p></div>`}
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h3>Dépenses</h3>${rmCanManage()?`<button class="btn btn-gold btn-sm" onclick="openRMFinanceForm('depenses')">+ Dépense</button>`:''}</div>
+      ${depenses.length?`<div class="table-wrap"><table><thead><tr><th>Date</th><th>Montant</th><th>Catégorie</th><th>Responsable</th></tr></thead><tbody>
+        ${depenses.map(d=>`<tr><td>${fmtDate(d.date)}</td><td>${fmtMoney(d.montant)}</td><td>${esc(d.categorie||'—')}</td><td>${esc(d.responsable||'—')}</td></tr>`).join('')}
+      </tbody></table></div>`:`<div class="empty-state"><p>Aucune dépense enregistrée.</p></div>`}
+    </div>
+  `;
+}
+function openRMFinanceForm(type){
+  const estEntree = type==='entrees';
+  openModal(`
+    <div class="modal-head"><h3>${estEntree?'Nouvelle entrée':'Nouvelle dépense'}</h3><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="grid2">
+        <div class="field"><label>Date</label><input type="date" id="rmfi_date" value="${new Date().toISOString().slice(0,10)}"></div>
+        <div class="field"><label>Montant (G)</label><input type="number" id="rmfi_montant"></div>
+      </div>
+      ${estEntree?`
+        <div class="field"><label>Provenance</label><input id="rmfi_provenance"></div>
+        <div class="field"><label>Donateur</label><input id="rmfi_donateur"></div>
+        <div class="field"><label>Type</label><input id="rmfi_type"></div>
+        <div class="field"><label>Référence</label><input id="rmfi_reference"></div>
+      `:`
+        <div class="field"><label>Catégorie</label><input id="rmfi_categorie"></div>
+        <div class="field"><label>Responsable</label><input id="rmfi_responsable"></div>
+        <div class="field"><label>Pièce justificative (référence/note)</label><input id="rmfi_piece"></div>
+      `}
+      <div class="field"><label>Description</label><textarea id="rmfi_description"></textarea></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-gold" onclick="saveRMFinance('${type}')">Enregistrer</button>
+    </div>
+  `);
+}
+async function saveRMFinance(type){
+  const estEntree = type==='entrees';
+  const date = document.getElementById('rmfi_date').value;
+  const montant = document.getElementById('rmfi_montant').value;
+  if(!date || !montant){ toast('Date et montant obligatoires.','err'); return; }
+  const data = { date, montant, description: document.getElementById('rmfi_description').value.trim() };
+  if(estEntree){
+    data.provenance = document.getElementById('rmfi_provenance').value.trim();
+    data.donateur = document.getElementById('rmfi_donateur').value.trim();
+    data.type = document.getElementById('rmfi_type').value.trim();
+    data.reference = document.getElementById('rmfi_reference').value.trim();
+  } else {
+    data.categorie = document.getElementById('rmfi_categorie').value.trim();
+    data.responsable = document.getElementById('rmfi_responsable').value.trim();
+    data.piece = document.getElementById('rmfi_piece').value.trim();
+  }
+  data.createdAt = Date.now();
+  await RM(_rmMinistereId, 'finances'+(estEntree?'Entrees':'Depenses')).push(data);
+  logAction('Finance ministère : '+(estEntree?'entrée':'dépense'), fmtMoney(montant));
+  toast('Enregistré.','ok');
+  closeModal();
+  renderRM_financesMinistere();
+}
+
+/* ---------- Critères administratifs ---------- */
+async function renderRM_criteres(){
+  const wrap = document.getElementById('rmTabContent');
+  wrap.innerHTML = '<div class="empty-state"><p>Chargement…</p></div>';
+  const snap = await RM(_rmMinistereId, 'criteres').once('value');
+  const c = snap.val() || {};
+  const champs = [
+    ['conditionsAdhesion',"Conditions d'adhésion"],['procedureInscription',"Procédure d'inscription"],
+    ['criteresMembre','Critères pour devenir membre'],['criteresComite','Critères pour intégrer le comité'],
+    ['conditionsRemplacement','Conditions de remplacement'],['modalitesRenouvellement','Modalités de renouvellement'],
+    ['procedureDemission','Procédure de démission'],['procedureDisciplinaire','Procédure disciplinaire'],
+  ];
+  wrap.innerHTML = `
+    <div class="panel">
+      <div class="panel-head"><h3>Manuel administratif</h3></div>
+      ${rmCanManage() ? champs.map(([key,label])=>`<div class="field"><label>${label}</label><textarea id="rmcr_${key}">${esc(c[key]||'')}</textarea></div>`).join('') + `<button class="btn btn-gold" onclick="saveRMCriteres()">Enregistrer</button>`
+      : champs.map(([key,label])=> c[key] ? `<p style="font-size:12.5px;color:var(--ink-dim);margin:0 0 10px;"><b style="color:var(--ink);">${label} :</b> ${esc(c[key])}</p>` : '').join('') || `<div class="empty-state"><p>Aucun critère enregistré.</p></div>`}
+    </div>
+  `;
+}
+async function saveRMCriteres(){
+  const champs = ['conditionsAdhesion','procedureInscription','criteresMembre','criteresComite','conditionsRemplacement','modalitesRenouvellement','procedureDemission','procedureDisciplinaire'];
+  const data = {};
+  champs.forEach(k=>{ const el = document.getElementById('rmcr_'+k); if(el) data[k] = el.value.trim(); });
+  await RM(_rmMinistereId, 'criteres').update(data);
+  logAction('Mise à jour critères administratifs', _rmMinistereId);
+  toast('Enregistré.','ok');
+  renderRM_criteres();
+}
+
+/* ---------- Historique administratif (chronologie) ---------- */
+async function renderRM_chronologie(){
+  const wrap = document.getElementById('rmTabContent');
+  wrap.innerHTML = '<div class="empty-state"><p>Chargement…</p></div>';
+  const snap = await RM(_rmMinistereId, 'chronologie').once('value');
+  let list = []; snap.forEach(c=>{ list.push({id:c.key,...c.val()}); });
+  list.sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+
+  wrap.innerHTML = `
+    ${rmCanManage()?`<div style="display:flex;justify-content:flex-end;margin-bottom:14px;"><button class="btn btn-gold" onclick="openRMChronoForm()">+ Événement</button></div>`:''}
+    <div class="panel">
+      ${list.length ? list.map(e=>`<div style="padding:10px 0;border-bottom:1px solid var(--navy-border);"><b style="color:var(--gold-bright);font-size:12.5px;">${fmtDate(e.date)}</b> — <span style="color:var(--ink);font-size:13px;">${esc(e.evenement)}</span>${e.description?`<p style="font-size:12px;color:var(--ink-faint);margin:4px 0 0;">${esc(e.description)}</p>`:''}</div>`).join('') : `<div class="empty-state"><p>Aucun événement enregistré.</p></div>`}
+    </div>
+  `;
+}
+function openRMChronoForm(){
+  openModal(`
+    <div class="modal-head"><h3>Nouvel événement</h3><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Date</label><input type="date" id="rmch_date" value="${new Date().toISOString().slice(0,10)}"></div>
+      <div class="field"><label>Événement</label><input id="rmch_evenement" placeholder="Ex: Changement de règlement interne"></div>
+      <div class="field"><label>Description</label><textarea id="rmch_description"></textarea></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-gold" onclick="saveRMChrono()">Ajouter</button>
+    </div>
+  `);
+}
+async function saveRMChrono(){
+  const date = document.getElementById('rmch_date').value;
+  const evenement = document.getElementById('rmch_evenement').value.trim();
+  if(!date || !evenement){ toast('Date et événement obligatoires.','err'); return; }
+  await RM(_rmMinistereId, 'chronologie').push({ date, evenement, description: document.getElementById('rmch_description').value.trim(), createdAt: Date.now() });
+  logAction('Événement chronologie ministère', evenement);
+  toast('Ajouté.','ok');
+  closeModal();
+  renderRM_chronologie();
+}
+
+/* ---------- Recherche transversale dans le Registre du Ministère ---------- */
+async function renderRM_rechercheMinistere(){
+  const wrap = document.getElementById('rmTabContent');
+  wrap.innerHTML = `
+    <div class="field"><input type="text" id="rmSearchInput" placeholder="Rechercher un mot-clé (documents, chronologie, comité, activités…)" oninput="doRMSearch()"></div>
+    <div id="rmSearchResults"></div>
+  `;
+}
+async function doRMSearch(){
+  const q = document.getElementById('rmSearchInput').value.trim().toLowerCase();
+  const resultsEl = document.getElementById('rmSearchResults');
+  if(q.length<2){ resultsEl.innerHTML=''; return; }
+  resultsEl.innerHTML = '<div class="empty-state"><p>Recherche…</p></div>';
+
+  const [docsSnap, chronoSnap, comiteSnap, actSnap] = await Promise.all([
+    RM(_rmMinistereId,'documents').once('value'), RM(_rmMinistereId,'chronologie').once('value'),
+    RM(_rmMinistereId,'comiteMembres').once('value'), RM(_rmMinistereId,'activitesRegulieres').once('value')
+  ]);
+  let results = [];
+  docsSnap.forEach(c=>{ const v=c.val(); if(JSON.stringify(v).toLowerCase().includes(q)) results.push({type:'Document',label:v.titre}); });
+  chronoSnap.forEach(c=>{ const v=c.val(); if(JSON.stringify(v).toLowerCase().includes(q)) results.push({type:'Chronologie',label:v.evenement}); });
+  comiteSnap.forEach(c=>{ const v=c.val(); if(JSON.stringify(v).toLowerCase().includes(q)) results.push({type:'Comité',label:v.nom+' — '+v.poste}); });
+  actSnap.forEach(c=>{ const v=c.val(); if(JSON.stringify(v).toLowerCase().includes(q)) results.push({type:'Activité régulière',label:v.nom}); });
+
+  resultsEl.innerHTML = results.length ? `<div class="panel">${results.map(r=>`<div style="padding:8px 0;border-bottom:1px solid var(--navy-border);"><span class="badge badge-gold">${r.type}</span> <span style="font-size:13px;color:var(--ink-dim);margin-left:8px;">${esc(r.label)}</span></div>`).join('')}</div>` : `<div class="empty-state"><p>Aucun résultat.</p></div>`;
 }
 </script>
 </body>
