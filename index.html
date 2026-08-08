@@ -642,6 +642,9 @@ const NAV_CONFIG = {
       {id:'rapports', label:'Rapports', icon:'📄'},
       {id:'calendrier', label:'Calendrier', icon:'📅'},
       {id:'registreMinistere', label:'Registres des Ministères', icon:'🗂️'},
+      {id:'calendrierAnnuelEglise', label:'Calendrier Annuel de l\'Église', icon:'📆'},
+      {id:'servicesOrdinaires', label:'Services Ordinaires', icon:'⏰'},
+      {id:'chantsReveils', label:'Chants des Réveils', icon:'🎵'},
     ]},
     {group:'Communication', items:[
       {id:'publications', label:'Publications', icon:'📢'},
@@ -672,6 +675,9 @@ const NAV_CONFIG = {
       {id:'ministeres', label:'Ministères', icon:'⛪'},
       {id:'calendrier', label:'Calendrier', icon:'📅'},
       {id:'registreMinistere', label:'Registres des Ministères', icon:'🗂️'},
+      {id:'calendrierAnnuelEglise', label:'Calendrier Annuel de l\'Église', icon:'📆'},
+      {id:'servicesOrdinaires', label:'Services Ordinaires', icon:'⏰'},
+      {id:'chantsReveils', label:'Chants des Réveils', icon:'🎵'},
     ]},
     {group:'Communication', items:[
       {id:'publications', label:'Publications', icon:'📢'},
@@ -694,6 +700,9 @@ const NAV_CONFIG = {
     ]},
     {group:'Vie de l\'Église', items:[
       {id:'rapportEglise', label:'Rapport de l\'Église', icon:'📖'},
+      {id:'calendrierAnnuelEglise', label:'Calendrier Annuel de l\'Église', icon:'📆'},
+      {id:'servicesOrdinaires', label:'Services Ordinaires', icon:'⏰'},
+      {id:'chantsReveils', label:'Chants des Réveils', icon:'🎵'},
     ]},
   ]
 };
@@ -785,7 +794,8 @@ function navTo(view){
     activites:'Activités', financements:'Demandes de financement', rapports:'Rapports d\'activité',
     calendrier:'Calendrier annuel', publications:'Publications', rencontres:'Rencontres', journal:'Journal d\'audit',
     notifications:'Notifications WhatsApp', comptes:'Comptes Pasteur / Administrateur', registre:'Registre Officiel de l\'Église',
-    rapportEglise:'Rapport de l\'Église', registreMinistere:'Registre du Ministère'};
+    rapportEglise:'Rapport de l\'Église', registreMinistere:'Registre du Ministère',
+    calendrierAnnuelEglise:'Calendrier Annuel de l\'Église', servicesOrdinaires:'Services Ordinaires de l\'Église', chantsReveils:'Chants des Réveils'};
   document.getElementById('viewTitle').textContent = titles[view] || view;
   const fn = window['render_'+view];
   if(typeof fn === 'function'){ fn(); } else { document.getElementById('contentArea').innerHTML = '<div class="empty-state"><div class="ic">⚒</div><p>Module en construction.</p></div>'; }
@@ -3616,6 +3626,7 @@ const RM_TABS = [
   {id:'historique', label:'Historique'},
   {id:'fonctionnement', label:'Fonctionnement'},
   {id:'documents', label:'Documents officiels'},
+  {id:'chants', label:'Chants du groupe'},
   {id:'reunionsInternes', label:'Réunions internes'},
   {id:'comite', label:'Comité'},
   {id:'activitesRegulieres', label:'Activités régulières'},
@@ -4275,6 +4286,287 @@ async function doRMSearch(){
   actSnap.forEach(c=>{ const v=c.val(); if(JSON.stringify(v).toLowerCase().includes(q)) results.push({type:'Activité régulière',label:v.nom}); });
 
   resultsEl.innerHTML = results.length ? `<div class="panel">${results.map(r=>`<div style="padding:8px 0;border-bottom:1px solid var(--navy-border);"><span class="badge badge-gold">${r.type}</span> <span style="font-size:13px;color:var(--ink-dim);margin-left:8px;">${esc(r.label)}</span></div>`).join('')}</div>` : `<div class="empty-state"><p>Aucun résultat.</p></div>`;
+}
+
+/* ====================== CALENDRIER ANNUEL DE L'ÉGLISE ====================== */
+const CA = (annee, path) => R('calendrierAnnuelEglise/'+annee+(path?'/'+path:''));
+let _caAnnee = new Date().getFullYear();
+
+async function render_calendrierAnnuelEglise(){
+  const el = document.getElementById('contentArea');
+  el.innerHTML = '<div class="empty-state"><p>Chargement…</p></div>';
+  const anneesSnap = await R('calendrierAnnuelEglise').once('value');
+  let annees = []; anneesSnap.forEach(c=>{ annees.push(c.key); });
+  if(!annees.includes(String(_caAnnee))) annees.push(String(_caAnnee));
+  annees = [...new Set(annees.map(Number))].sort((a,b)=>b-a);
+
+  const snap = await CA(_caAnnee, 'activites').once('value');
+  let list = []; snap.forEach(c=>{ list.push({id:c.key,...c.val()}); });
+  list.sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  const peutGerer = isAdmin();
+
+  el.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+      <div class="tag-row">${annees.map(a=>`<span class="tag-filter ${a===_caAnnee?'active':''}" onclick="switchCAAnnee(${a})">${a}</span>`).join('')}
+        ${peutGerer?`<span class="tag-filter" onclick="addCAAnnee()">+ Nouvelle année</span>`:''}
+      </div>
+      ${peutGerer?`<button class="btn btn-gold" onclick="openCAForm()">+ Activité</button>`:''}
+    </div>
+    <p style="font-size:12px;color:var(--ink-faint);margin-bottom:14px;">Calendrier officiel des activités prévues pour l'année ${_caAnnee}. Chaque année est conservée séparément — rien n'est jamais écrasé.</p>
+    <div class="panel"><div class="table-wrap"><table><thead><tr><th>Titre</th><th>Date</th><th>Type</th><th>Lieu</th><th></th></tr></thead><tbody>
+      ${list.length ? list.map(a=>`<tr><td><b style="color:var(--ink);">${esc(a.titre)}</b></td><td>${fmtDate(a.date)}</td><td>${esc(a.type||'—')}</td><td>${esc(a.lieu||'—')}</td>
+      <td>${peutGerer?`<button class="btn btn-ghost btn-sm" onclick='openCAForm(${JSON.stringify(a).replace(/'/g,"&#39;")})'>✏️</button><button class="btn btn-ghost btn-sm" onclick="deleteCAActivite('${a.id}')">🗑</button>`:''}</td></tr>`).join('') : `<tr><td colspan="5"><div class="empty-state"><p>Aucune activité prévue pour ${_caAnnee}.</p></div></td></tr>`}
+    </tbody></table></div></div>
+  `;
+}
+function switchCAAnnee(a){ _caAnnee = a; render_calendrierAnnuelEglise(); }
+function addCAAnnee(){
+  const a = prompt("Année à créer (ex: "+(_caAnnee+1)+") :");
+  if(!a || isNaN(parseInt(a))) return;
+  _caAnnee = parseInt(a);
+  render_calendrierAnnuelEglise();
+}
+function openCAForm(existing){
+  const a = existing || {};
+  openModal(`
+    <div class="modal-head"><h3>${existing?'Modifier l\'':'Nouvelle '}activité — ${_caAnnee}</h3><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Titre</label><input id="ca_titre" value="${esc(a.titre||'')}"></div>
+      <div class="grid2">
+        <div class="field"><label>Date</label><input type="date" id="ca_date" value="${a.date||''}"></div>
+        <div class="field"><label>Type</label><input id="ca_type" value="${esc(a.type||'')}" placeholder="Ex: Convention, Croisade..."></div>
+      </div>
+      <div class="field"><label>Lieu</label><input id="ca_lieu" value="${esc(a.lieu||'')}"></div>
+      <div class="field"><label>Description</label><textarea id="ca_description">${esc(a.description||'')}</textarea></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-gold" onclick="saveCAActivite(${existing?`'${a.id}'`:'null'})">Enregistrer</button>
+    </div>
+  `);
+}
+async function saveCAActivite(existingId){
+  const data = {
+    titre: document.getElementById('ca_titre').value.trim(), date: document.getElementById('ca_date').value,
+    type: document.getElementById('ca_type').value.trim(), lieu: document.getElementById('ca_lieu').value.trim(),
+    description: document.getElementById('ca_description').value.trim(),
+  };
+  if(!data.titre || !data.date){ toast('Titre et date obligatoires.','err'); return; }
+  if(existingId){ await CA(_caAnnee, 'activites/'+existingId).update(data); logAction('Modification calendrier annuel', data.titre); }
+  else { data.createdAt = Date.now(); await CA(_caAnnee, 'activites').push(data); logAction('Nouvelle activité calendrier annuel', data.titre); }
+  toast('Enregistré.','ok');
+  closeModal();
+  render_calendrierAnnuelEglise();
+}
+async function deleteCAActivite(id){
+  if(!confirm('Supprimer cette activité du calendrier ?')) return;
+  await CA(_caAnnee, 'activites/'+id).remove();
+  logAction('Suppression activité calendrier annuel', id);
+  toast('Supprimé.','ok');
+  render_calendrierAnnuelEglise();
+}
+
+/* ====================== SERVICES ET ACTIVITÉS ORDINAIRES ====================== */
+async function render_servicesOrdinaires(){
+  const el = document.getElementById('contentArea');
+  el.innerHTML = '<div class="empty-state"><p>Chargement…</p></div>';
+  const snap = await R('servicesOrdinaires').once('value');
+  let list = []; snap.forEach(c=>{ list.push({id:c.key,...c.val()}); });
+  list.sort((a,b)=>(a.nom||'').localeCompare(b.nom||''));
+  const peutGerer = isAdmin();
+
+  el.innerHTML = `
+    <p style="font-size:12px;color:var(--ink-faint);margin-bottom:14px;">Services et activités qui ne changent pas chaque année (horaires de cultes, d'études, etc.). Toute modification génère automatiquement un procès-verbal archivé.</p>
+    ${peutGerer?`<div style="display:flex;justify-content:flex-end;margin-bottom:14px;"><button class="btn btn-gold" onclick="openSOForm()">+ Nouveau service</button></div>`:''}
+    ${list.length ? list.map(s=>`<div class="panel">
+      <div style="display:flex;justify-content:space-between;align-items:start;">
+        <div>
+          <h3 style="margin:0 0 4px;font-size:15px;">${esc(s.nom)}</h3>
+          <p style="font-size:12.5px;color:var(--ink-dim);margin:0;">${esc(s.jour||'')} ${esc(s.heure||'')} · ${esc(s.lieu||'—')}</p>
+          ${s.description?`<p style="font-size:12px;color:var(--ink-faint);margin:6px 0 0;">${esc(s.description)}</p>`:''}
+        </div>
+        ${peutGerer?`<button class="btn btn-ghost btn-sm" onclick='openSOForm(${JSON.stringify(s).replace(/'/g,"&#39;")})'>✏️ Modifier</button>`:''}
+      </div>
+      ${s.historique&&s.historique.length?`<div style="margin-top:10px;font-size:11px;color:var(--gold-bright);cursor:pointer;text-decoration:underline;" onclick='viewSOHistorique(${JSON.stringify(s).replace(/'/g,"&#39;")})'>📄 ${s.historique.length} modification(s) archivée(s) — voir les PV</div>`:''}
+    </div>`).join('') : `<div class="empty-state"><div class="ic">⏰</div><p>Aucun service enregistré.</p></div>`}
+  `;
+}
+function openSOForm(existing){
+  const s = existing || {};
+  openModal(`
+    <div class="modal-head"><h3>${existing?'Modifier le':'Nouveau'} service</h3><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Nom</label><input id="so_nom" value="${esc(s.nom||'')}" placeholder="Ex: Culte du dimanche matin"></div>
+      <div class="grid2">
+        <div class="field"><label>Jour</label><input id="so_jour" value="${esc(s.jour||'')}" placeholder="Ex: Dimanche"></div>
+        <div class="field"><label>Heure</label><input id="so_heure" value="${esc(s.heure||'')}" placeholder="Ex: 9h00"></div>
+      </div>
+      <div class="field"><label>Lieu</label><input id="so_lieu" value="${esc(s.lieu||'')}"></div>
+      <div class="field"><label>Description</label><textarea id="so_description">${esc(s.description||'')}</textarea></div>
+      ${existing?`
+      <hr class="sep">
+      <p style="font-size:13px;color:var(--gold-bright);font-weight:600;margin-bottom:10px;">Procès-verbal de cette modification (obligatoire)</p>
+      <div class="field"><label>Motif / décision</label><textarea id="so_decision" placeholder="Ex: Le comité a décidé d'avancer l'heure du culte à 8h30..."></textarea></div>
+      <div class="field"><label>Responsable(s) de la décision</label><input id="so_responsables" placeholder="Ex: Pasteur Honoré, Comité Exécutif"></div>
+      `:''}
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-gold" onclick="saveSO(${existing?`'${s.id}'`:'null'})">Enregistrer</button>
+    </div>
+  `);
+}
+async function saveSO(existingId){
+  const data = {
+    nom: document.getElementById('so_nom').value.trim(), jour: document.getElementById('so_jour').value.trim(),
+    heure: document.getElementById('so_heure').value.trim(), lieu: document.getElementById('so_lieu').value.trim(),
+    description: document.getElementById('so_description').value.trim(),
+  };
+  if(!data.nom){ toast('Le nom est obligatoire.','err'); return; }
+
+  if(existingId){
+    const decision = document.getElementById('so_decision').value.trim();
+    const responsables = document.getElementById('so_responsables').value.trim();
+    if(!decision || !responsables){ toast('Le motif et le(s) responsable(s) de la décision sont obligatoires pour modifier un service existant.','err'); return; }
+    const snap = await R('servicesOrdinaires/'+existingId).once('value');
+    const ancien = snap.val() || {};
+    const historique = ancien.historique || [];
+    historique.push({
+      ancienneVersion: { nom:ancien.nom, jour:ancien.jour, heure:ancien.heure, lieu:ancien.lieu, description:ancien.description },
+      dateModification: Date.now(), decision, responsables, modifiePar: currentProfile.nom
+    });
+    await R('servicesOrdinaires/'+existingId).set({ ...data, historique });
+    logAction('Modification service ordinaire (PV généré)', data.nom);
+    toast('Modifié — procès-verbal archivé.','ok');
+  } else {
+    data.historique = [];
+    data.createdAt = Date.now();
+    await R('servicesOrdinaires').push(data);
+    logAction('Nouveau service ordinaire', data.nom);
+    toast('Service créé.','ok');
+  }
+  closeModal();
+  render_servicesOrdinaires();
+}
+function viewSOHistorique(s){
+  openModal(`
+    <div class="modal-head"><h3>Historique des modifications — ${esc(s.nom)}</h3><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      ${s.historique.slice().reverse().map((h,i)=>`<div class="panel">
+        <div style="font-size:11px;color:var(--ink-faint);margin-bottom:6px;">${fmtDateTime(new Date(h.dateModification).toISOString())} · par ${esc(h.modifiePar||'—')}</div>
+        <p style="font-size:12.5px;color:var(--ink);font-weight:600;margin:0 0 4px;">Décision : ${esc(h.decision)}</p>
+        <p style="font-size:12px;color:var(--ink-dim);margin:0 0 8px;">Responsable(s) : ${esc(h.responsables)}</p>
+        <p style="font-size:11.5px;color:var(--ink-faint);margin:0;">Ancienne version : ${esc(h.ancienneVersion.nom)} — ${esc(h.ancienneVersion.jour||'')} ${esc(h.ancienneVersion.heure||'')} — ${esc(h.ancienneVersion.lieu||'')}</p>
+        <button class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick='printSOPv(${JSON.stringify(h).replace(/'/g,"&#39;")}, "${esc(s.nom).replace(/"/g,'&quot;')}")'>🖨 Imprimer ce PV</button>
+      </div>`).join('')}
+    </div>
+    <div class="modal-foot"><button class="btn btn-gold" onclick="closeModal()">Fermer</button></div>
+  `);
+}
+function printSOPv(h, nomService){
+  const html = `
+    <div style="font-family:Georgia,serif;max-width:680px;margin:0 auto;">
+      <div style="text-align:center;border-bottom:2px solid #d4af37;padding-bottom:14px;margin-bottom:24px;">
+        <h2 style="margin:0;">Église de Dieu Salem de Jérémie</h2>
+        <div style="font-size:12px;color:#555;">Procès-verbal de modification — Service ordinaire</div>
+      </div>
+      <p><b>Service concerné :</b> ${esc(nomService)}</p>
+      <p><b>Date de la modification :</b> ${fmtDateTime(new Date(h.dateModification).toISOString())}</p>
+      <p><b>Décision :</b><br>${esc(h.decision)}</p>
+      <p><b>Responsable(s) :</b> ${esc(h.responsables)}</p>
+      <p><b>Ancienne version :</b> ${esc(h.ancienneVersion.nom)} — ${esc(h.ancienneVersion.jour||'')} ${esc(h.ancienneVersion.heure||'')} — ${esc(h.ancienneVersion.lieu||'')}</p>
+      <br><br>
+      <p>Modifié par : ${esc(h.modifiePar||'—')}</p>
+      <p style="margin-top:50px;">Signature : ______________________</p>
+    </div>
+  `;
+  document.getElementById('printArea').innerHTML = html;
+  window.print();
+}
+
+/* ====================== CHANTS DES RÉVEILS (admin) + CHANTS DU GROUPE (par ministère) ====================== */
+async function render_chantsReveils(){
+  const el = document.getElementById('contentArea');
+  el.innerHTML = '<div class="empty-state"><p>Chargement…</p></div>';
+  const snap = await R('chantsReveils').once('value');
+  let list = []; snap.forEach(c=>{ list.push({id:c.key,...c.val()}); });
+  list.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+  const peutGerer = isAdmin();
+
+  el.innerHTML = `
+    ${peutGerer?`<div style="display:flex;justify-content:flex-end;margin-bottom:14px;"><button class="btn btn-gold" onclick="openChantForm('chantsReveils')">+ Nouveau chant</button></div>`:''}
+    ${list.length ? list.map(c=>`<div class="panel">
+      <div style="display:flex;justify-content:space-between;align-items:start;">
+        <div>
+          <h3 style="margin:0 0 4px;font-size:15px;">${esc(c.titre)}</h3>
+          <p style="font-size:11.5px;color:var(--ink-faint);margin:0;">${esc(c.auteurs||'—')} ${c.date?'· '+fmtDate(c.date):''}</p>
+        </div>
+        ${peutGerer?`<button class="btn btn-ghost btn-sm" onclick='openChantForm("chantsReveils", ${JSON.stringify(c).replace(/'/g,"&#39;")})'>✏️</button>`:''}
+      </div>
+      ${c.circonstances?`<p style="font-size:12px;color:var(--ink-dim);margin:8px 0 0;"><b>Circonstances :</b> ${esc(c.circonstances)}</p>`:''}
+      ${c.informations?`<p style="font-size:12px;color:var(--ink-dim);margin:6px 0 0;">${esc(c.informations)}</p>`:''}
+      ${c.paroles?`<div style="margin-top:10px;padding:10px;background:var(--navy-700);border-radius:8px;font-size:12.5px;color:var(--ink-dim);white-space:pre-wrap;">${esc(c.paroles)}</div>`:''}
+    </div>`).join('') : `<div class="empty-state"><div class="ic">🎵</div><p>Aucun chant enregistré.</p></div>`}
+  `;
+}
+function openChantForm(node, existing, ministereId){
+  const c = existing || {};
+  openModal(`
+    <div class="modal-head"><h3>${existing?'Modifier le':'Nouveau'} chant</h3><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Titre du chant</label><input id="ch_titre" value="${esc(c.titre||'')}"></div>
+      <div class="grid2">
+        <div class="field"><label>Auteur(s)</label><input id="ch_auteurs" value="${esc(c.auteurs||'')}"></div>
+        <div class="field"><label>Date</label><input type="date" id="ch_date" value="${c.date||''}"></div>
+      </div>
+      <div class="field"><label>Circonstances</label><textarea id="ch_circonstances" placeholder="Contexte dans lequel ce chant a été composé/adopté...">${esc(c.circonstances||'')}</textarea></div>
+      <div class="field"><label>Informations complémentaires</label><textarea id="ch_informations">${esc(c.informations||'')}</textarea></div>
+      <div class="field"><label>Paroles du chant (coller ou écrire)</label><textarea id="ch_paroles" style="min-height:180px;">${esc(c.paroles||'')}</textarea></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-gold" onclick="saveChant('${node}', ${existing?`'${c.id}'`:'null'}, ${ministereId?`'${ministereId}'`:'null'})">Enregistrer</button>
+    </div>
+  `);
+}
+async function saveChant(node, existingId, ministereId){
+  const data = {
+    titre: document.getElementById('ch_titre').value.trim(), auteurs: document.getElementById('ch_auteurs').value.trim(),
+    date: document.getElementById('ch_date').value, circonstances: document.getElementById('ch_circonstances').value.trim(),
+    informations: document.getElementById('ch_informations').value.trim(), paroles: document.getElementById('ch_paroles').value.trim(),
+  };
+  if(!data.titre){ toast('Le titre est obligatoire.','err'); return; }
+  const ref = ministereId ? RM(ministereId, node) : R(node);
+  if(existingId){ await (ministereId ? RM(ministereId, node+'/'+existingId) : R(node+'/'+existingId)).update(data); logAction('Modification chant', data.titre); }
+  else { data.ajoutePar = currentProfile.nom; data.createdAt = Date.now(); await ref.push(data); logAction('Nouveau chant', data.titre); }
+  toast('Chant enregistré.','ok');
+  closeModal();
+  if(ministereId) renderRM_chants(); else render_chantsReveils();
+}
+
+/* ---------- Chants du groupe (par ministère) ---------- */
+async function renderRM_chants(){
+  const wrap = document.getElementById('rmTabContent');
+  wrap.innerHTML = '<div class="empty-state"><p>Chargement…</p></div>';
+  const snap = await RM(_rmMinistereId, 'chants').once('value');
+  let list = []; snap.forEach(c=>{ list.push({id:c.key,...c.val()}); });
+  list.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+
+  wrap.innerHTML = `
+    ${rmCanManage()?`<div style="display:flex;justify-content:flex-end;margin-bottom:14px;"><button class="btn btn-gold" onclick="openChantForm('chants', null, '${_rmMinistereId}')">+ Nouveau chant</button></div>`:''}
+    ${list.length ? list.map(c=>`<div class="panel">
+      <div style="display:flex;justify-content:space-between;align-items:start;">
+        <div>
+          <h3 style="margin:0 0 4px;font-size:15px;">${esc(c.titre)}</h3>
+          <p style="font-size:11.5px;color:var(--ink-faint);margin:0;">${esc(c.auteurs||'—')} ${c.date?'· '+fmtDate(c.date):''}</p>
+        </div>
+        ${rmCanManage()?`<button class="btn btn-ghost btn-sm" onclick='openChantForm("chants", ${JSON.stringify(c).replace(/'/g,"&#39;")}, "${_rmMinistereId}")'>✏️</button>`:''}
+      </div>
+      ${c.circonstances?`<p style="font-size:12px;color:var(--ink-dim);margin:8px 0 0;"><b>Circonstances :</b> ${esc(c.circonstances)}</p>`:''}
+      ${c.informations?`<p style="font-size:12px;color:var(--ink-dim);margin:6px 0 0;">${esc(c.informations)}</p>`:''}
+      ${c.paroles?`<div style="margin-top:10px;padding:10px;background:var(--navy-700);border-radius:8px;font-size:12.5px;color:var(--ink-dim);white-space:pre-wrap;">${esc(c.paroles)}</div>`:''}
+    </div>`).join('') : `<div class="empty-state"><div class="ic">🎵</div><p>Aucun chant enregistré pour ce ministère.</p></div>`}
+  `;
 }
 </script>
 </body>
