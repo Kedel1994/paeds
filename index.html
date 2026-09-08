@@ -498,6 +498,7 @@ async function checkOverdueActivityReports(){
   let rapporteesIds = new Set();
   repSnap.forEach(c=>{ const v=c.val(); if(v.activiteId) rapporteesIds.add(v.activiteId); });
 
+  let activitesEnRetard = [];
   actSnap.forEach(c=>{
     const a = c.val();
     if(!a.date || a.date >= todayStr) return;
@@ -507,11 +508,16 @@ async function checkOverdueActivityReports(){
     if(a.rapportAlertSent) return;
     const m = ministeres[a.ministereId];
     if(!m || m.statut === 'suspendu') return;
-    queueWhatsApp(m.nom, m.whatsapp||m.telephone,
+    activitesEnRetard.push({id:c.key, a, m});
+  });
+  // Envoi séquentiel avec pause : EmailJS (compte gratuit) refuse les envois simultanés trop nombreux.
+  for(const {id, a, m} of activitesEnRetard){
+    await queueWhatsApp(m.nom, m.whatsapp||m.telephone,
       `⚠️ Rapport en retard : l'activité "${a.titre}" du ${fmtDate(a.date)} est passée sans rapport soumis. Merci de le soumettre rapidement sur PAEDS.`,
       'rapport_retard', m.email);
-    R('activites/'+c.key).update({rapportAlertSent: true});
-  });
+    await R('activites/'+id).update({rapportAlertSent: true});
+    await sleep(600);
+  }
 }
 
 const MOIS_FR = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
@@ -550,6 +556,7 @@ async function checkMonthlyReports(){
         `⚠️ Rapport mensuel manquant : le ministère n'a pas encore soumis son rapport mensuel pour ${moisLabelFr(mois)}. Merci de le soumettre sur PAEDS.`,
         'rapport_mensuel_manquant', m.email);
       await R('ministeres/'+m.id).update({[alertKey]: true});
+      await sleep(600);
     }
   }
 }
@@ -2223,13 +2230,17 @@ async function savePublication(existingId){
   closeModal();
   render_publications();
 }
+function sleep(ms){ return new Promise(resolve=>setTimeout(resolve, ms)); }
 async function notifyAllMinisteres(message, type){
   const snap = await R('ministeres').once('value');
-  snap.forEach(c=>{
-    const m = c.val();
-    if(m.statut === 'suspendu') return;
-    queueWhatsApp(m.nom, m.whatsapp||m.telephone, message, type, m.email);
-  });
+  let ministeres = []; snap.forEach(c=>{ ministeres.push(c.val()); });
+  // Envoi séquentiel avec une courte pause entre chaque email : EmailJS (compte gratuit)
+  // refuse les envois simultanés trop nombreux ("Connection Limit Exceeded").
+  for(const m of ministeres){
+    if(m.statut === 'suspendu') continue;
+    await queueWhatsApp(m.nom, m.whatsapp||m.telephone, message, type, m.email);
+    await sleep(600);
+  }
 }
 async function markPublicationSeen(id){
   await R('publications/'+id+'/vuPar/'+currentUser.uid).set(Date.now());
