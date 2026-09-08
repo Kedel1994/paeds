@@ -359,6 +359,7 @@ window.addEventListener('unhandledrejection', function(e){
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-database-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script>
 /* ====================== FIREBASE INIT ====================== */
 const firebaseConfig = {
@@ -412,18 +413,44 @@ function logAction(action, details){
   R('journal').push({ action, details: details||'', uid: currentUser?currentUser.uid:'system', nom: currentProfile?currentProfile.nom:'système', ts: Date.now() });
 }
 
+/* ====================== NOTIFICATIONS EMAIL AUTOMATIQUES (EmailJS) ====================== */
+// ⚠️ Colle ici tes identifiants EmailJS (emailjs.com, compte gratuit) pour activer
+// l'envoi automatique d'emails aux responsables — sans clé configurée, l'app continue
+// de fonctionner normalement, seuls les emails automatiques restent inactifs.
+const EMAILJS_PUBLIC_KEY = "fyvuAZ8E02LXsKMhm";
+const EMAILJS_SERVICE_ID = "service_1ic9uur";
+const EMAILJS_TEMPLATE_ID = "ejs-test-mail-service";
+let _emailjsReady = false;
+function initEmailJS(){
+  if(typeof emailjs === 'undefined') return;
+  if(EMAILJS_PUBLIC_KEY.startsWith('COLLE_')) return;
+  try{ emailjs.init({publicKey: EMAILJS_PUBLIC_KEY}); _emailjsReady = true; }catch(e){ dbg('Erreur init EmailJS : '+e.message, true); }
+}
+async function sendEmailNotification(toEmail, toName, subject, message){
+  if(!toEmail) return;
+  if(!_emailjsReady){ initEmailJS(); }
+  if(!_emailjsReady) return; // pas de clé configurée — silencieux, la file WhatsApp reste le canal de secours
+  try{
+    await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
+      to_email: toEmail, to_name: toName || '', subject: subject || 'Notification PAEDS', message: message
+    });
+  }catch(e){ dbg('Erreur envoi email ('+toEmail+') : '+(e.text||e.message), true); }
+}
+
 /* ====================== FILE D'ATTENTE WHATSAPP ====================== */
 // Chaque événement important pousse un message dans paeds/notifications_whatsapp/.
 // L'administrateur peut copier/envoyer manuellement chaque message, ou configurer
 // un webhook (Cloud Function, Make.com, Zapier, etc.) qui lira cette file et enverra
 // automatiquement via l'API WhatsApp Business. Voir DEPLOIEMENT.md pour les options.
-async function queueWhatsApp(destinataireNom, telephone, message, type){
+async function queueWhatsApp(destinataireNom, telephone, message, type, email){
   const entry = {
     destinataireNom: destinataireNom || '—', telephone: telephone || '', message, type,
     statut: 'en_attente', createdAt: Date.now()
   };
   const ref = await R('notifications_whatsapp').push(entry);
-  // Tentative d'envoi automatique si un webhook est configuré (facultatif, échoue silencieusement)
+  // Envoi automatique par email si une adresse est fournie (canal principal, aucune confirmation requise)
+  if(email){ sendEmailNotification(email, destinataireNom, 'PAEDS — Notification : '+(type||'').replace(/_/g,' '), message); }
+  // Tentative d'envoi automatique WhatsApp si un webhook est configuré (canal de secours, facultatif)
   try{
     const cfgSnap = await R('config/whatsappWebhookUrl').once('value');
     const url = cfgSnap.val();
@@ -482,7 +509,7 @@ async function checkOverdueActivityReports(){
     if(!m || m.statut === 'suspendu') return;
     queueWhatsApp(m.nom, m.whatsapp||m.telephone,
       `⚠️ Rapport en retard : l'activité "${a.titre}" du ${fmtDate(a.date)} est passée sans rapport soumis. Merci de le soumettre rapidement sur PAEDS.`,
-      'rapport_retard');
+      'rapport_retard', m.email);
     R('activites/'+c.key).update({rapportAlertSent: true});
   });
 }
@@ -521,7 +548,7 @@ async function checkMonthlyReports(){
       if(m[alertKey]) continue;
       queueWhatsApp(m.nom, m.whatsapp||m.telephone,
         `⚠️ Rapport mensuel manquant : le ministère n'a pas encore soumis son rapport mensuel pour ${moisLabelFr(mois)}. Merci de le soumettre sur PAEDS.`,
-        'rapport_mensuel_manquant');
+        'rapport_mensuel_manquant', m.email);
       await R('ministeres/'+m.id).update({[alertKey]: true});
     }
   }
@@ -714,6 +741,7 @@ function initAppShell(){
   buildNav();
   navTo('dashboard');
   watchNotifBadge();
+  initEmailJS();
   checkMandateExpirations();
   checkOverdueActivityReports();
   checkMonthlyReports();
@@ -1624,7 +1652,7 @@ async function decideFinancing(id, decision){
   const minSnap = await R('ministeres/'+f.ministereId).once('value');
   const m = minSnap.val();
   const label = decision==='approuve' ? 'approuvée ✅' : 'refusée ❌';
-  queueWhatsApp(m?m.nom:'Ministère', m?(m.whatsapp||m.telephone):'', `Votre demande de financement pour "${f.activiteTitre}" a été ${label} par le Pasteur.`, 'decision_financement');
+  queueWhatsApp(m?m.nom:'Ministère', m?(m.whatsapp||m.telephone):'', `Votre demande de financement pour "${f.activiteTitre}" a été ${label} par le Pasteur.`, 'decision_financement', m?m.email:null);
   toast(decision==='approuve'?'Demande approuvée.':'Demande refusée.','ok');
   render_financements();
 }
@@ -1930,7 +1958,7 @@ async function decideReport(id, decision){
   const minSnap = await R('ministeres/'+r.ministereId).once('value');
   const m = minSnap.val();
   const labels = {approuve:'approuvé ✅', refuse:'refusé ❌', retourne:'retourné pour correction ↩️'};
-  queueWhatsApp(m?m.nom:'Ministère', m?(m.whatsapp||m.telephone):'', `Votre rapport "${r.nom}" a été ${labels[decision]||decision} par le Pasteur.`, 'decision_rapport');
+  queueWhatsApp(m?m.nom:'Ministère', m?(m.whatsapp||m.telephone):'', `Votre rapport "${r.nom}" a été ${labels[decision]||decision} par le Pasteur.`, 'decision_rapport', m?m.email:null);
   toast('Rapport mis à jour.','ok');
   closeModal();
   render_rapports();
@@ -2200,7 +2228,7 @@ async function notifyAllMinisteres(message, type){
   snap.forEach(c=>{
     const m = c.val();
     if(m.statut === 'suspendu') return;
-    queueWhatsApp(m.nom, m.whatsapp||m.telephone, message, type);
+    queueWhatsApp(m.nom, m.whatsapp||m.telephone, message, type, m.email);
   });
 }
 async function markPublicationSeen(id){
@@ -3627,6 +3655,7 @@ const RM_TABS = [
   {id:'fonctionnement', label:'Fonctionnement'},
   {id:'documents', label:'Documents officiels'},
   {id:'chants', label:'Chants du groupe'},
+  {id:'invitations', label:'Invitations reçues'},
   {id:'reunionsInternes', label:'Réunions internes'},
   {id:'comite', label:'Comité'},
   {id:'activitesRegulieres', label:'Activités régulières'},
@@ -4567,6 +4596,92 @@ async function renderRM_chants(){
       ${c.paroles?`<div style="margin-top:10px;padding:10px;background:var(--navy-700);border-radius:8px;font-size:12.5px;color:var(--ink-dim);white-space:pre-wrap;">${esc(c.paroles)}</div>`:''}
     </div>`).join('') : `<div class="empty-state"><div class="ic">🎵</div><p>Aucun chant enregistré pour ce ministère.</p></div>`}
   `;
+}
+
+/* ---------- Invitations reçues (par une autre entité/église) ---------- */
+async function renderRM_invitations(){
+  const wrap = document.getElementById('rmTabContent');
+  wrap.innerHTML = '<div class="empty-state"><p>Chargement…</p></div>';
+  const snap = await RM(_rmMinistereId, 'invitations').once('value');
+  let list = []; snap.forEach(c=>{ list.push({id:c.key,...c.val()}); });
+  list.sort((a,b)=>(b.dateReception||'').localeCompare(a.dateReception||''));
+  const peutApprouver = isPasteur() || isAdmin();
+
+  wrap.innerHTML = `
+    ${rmCanManage()?`<div style="display:flex;justify-content:flex-end;margin-bottom:14px;"><button class="btn btn-gold" onclick="openRMInvitationForm()">+ Nouvelle invitation reçue</button></div>`:''}
+    ${list.length ? list.map(inv=>`<div class="panel">
+      <div style="display:flex;justify-content:space-between;align-items:start;gap:10px;">
+        <div>
+          <span class="badge badge-gold">${esc(inv.typeActivite||'—')}</span>
+          <h3 style="margin:8px 0 4px;font-size:15px;">${esc(inv.nomEntite)}</h3>
+          <p style="font-size:11.5px;color:var(--ink-faint);margin:0;">${esc(inv.adresse||'—')}</p>
+        </div>
+        ${statutBadge(inv.statutApprobation||'en_attente')}
+      </div>
+      ${inv.description?`<p style="font-size:12.5px;color:var(--ink-dim);margin-top:10px;">${esc(inv.description)}</p>`:''}
+      <p style="font-size:12px;color:var(--ink-faint);margin-top:8px;">Reçue le ${fmtDate(inv.dateReception)} · Activité prévue le ${fmtDate(inv.datePrevue)}</p>
+      ${inv.commentaireApprobation?`<p style="font-size:12px;color:var(--ink-dim);margin-top:6px;"><b style="color:var(--ink);">Commentaire :</b> ${esc(inv.commentaireApprobation)}</p>`:''}
+      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
+        ${rmCanManage()?`<button class="btn btn-ghost btn-sm" onclick='openRMInvitationForm(${JSON.stringify(inv).replace(/'/g,"&#39;")})'>✏️ Modifier</button>`:''}
+        ${peutApprouver && inv.statutApprobation!=='approuve' ? `<button class="btn btn-gold btn-sm" onclick="decideRMInvitation('${inv.id}','approuve')">Approuver</button>` : ''}
+        ${peutApprouver && inv.statutApprobation!=='refuse' ? `<button class="btn btn-danger btn-sm" onclick="decideRMInvitation('${inv.id}','refuse')">Refuser</button>` : ''}
+      </div>
+    </div>`).join('') : `<div class="empty-state"><div class="ic">✉️</div><p>Aucune invitation enregistrée.</p></div>`}
+  `;
+}
+function openRMInvitationForm(existing){
+  const inv = existing || {};
+  openModal(`
+    <div class="modal-head"><h3>${existing?'Modifier l\'':'Nouvelle '}invitation reçue</h3><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Nom de l'église / entité invitante</label><input id="rmi_nomEntite" value="${esc(inv.nomEntite||'')}"></div>
+      <div class="field"><label>Adresse</label><input id="rmi_adresse" value="${esc(inv.adresse||'')}"></div>
+      <div class="field"><label>Type d'activité</label><input id="rmi_typeActivite" placeholder="Ex: Réveil, Convention, Croisade..." value="${esc(inv.typeActivite||'')}"></div>
+      <div class="field"><label>Description de l'invitation</label><textarea id="rmi_description">${esc(inv.description||'')}</textarea></div>
+      <div class="grid2">
+        <div class="field"><label>Date de réception de l'invitation</label><input type="date" id="rmi_dateReception" value="${inv.dateReception||''}"></div>
+        <div class="field"><label>Date prévue de l'activité</label><input type="date" id="rmi_datePrevue" value="${inv.datePrevue||''}"></div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-gold" onclick="saveRMInvitation(${existing?`'${inv.id}'`:'null'})">Enregistrer</button>
+    </div>
+  `);
+}
+async function saveRMInvitation(existingId){
+  const data = {
+    nomEntite: document.getElementById('rmi_nomEntite').value.trim(),
+    adresse: document.getElementById('rmi_adresse').value.trim(),
+    typeActivite: document.getElementById('rmi_typeActivite').value.trim(),
+    description: document.getElementById('rmi_description').value.trim(),
+    dateReception: document.getElementById('rmi_dateReception').value,
+    datePrevue: document.getElementById('rmi_datePrevue').value,
+  };
+  if(!data.nomEntite || !data.dateReception){ toast('Le nom de l\'entité et la date de réception sont obligatoires.','err'); return; }
+  if(existingId){
+    await RM(_rmMinistereId, 'invitations/'+existingId).update(data);
+    logAction('Modification invitation reçue', data.nomEntite);
+  } else {
+    data.statutApprobation = 'en_attente';
+    data.enregistrePar = currentProfile.nom;
+    data.createdAt = Date.now();
+    await RM(_rmMinistereId, 'invitations').push(data);
+    logAction('Nouvelle invitation reçue', data.nomEntite);
+    const minSnap = await R('ministeres/'+_rmMinistereId).once('value');
+    const m = minSnap.val();
+    queueWhatsApp('Pasteur & Administrateur', '', `Nouvelle invitation reçue par ${m?m.nom:'un ministère'} : ${data.typeActivite} de la part de ${data.nomEntite}, prévue le ${fmtDate(data.datePrevue)}. En attente d'approbation sur PAEDS.`, 'invitation', null);
+  }
+  toast('Invitation enregistrée.','ok');
+  closeModal();
+  renderRM_invitations();
+}
+async function decideRMInvitation(id, decision){
+  const commentaire = prompt(decision==='approuve' ? 'Commentaire (facultatif) :' : 'Motif du refus (facultatif) :') || '';
+  await RM(_rmMinistereId, 'invitations/'+id).update({ statutApprobation: decision, commentaireApprobation: commentaire, decidePar: currentProfile.nom, decideAt: Date.now() });
+  logAction('Décision invitation : '+decision, id);
+  toast(decision==='approuve'?'Invitation approuvée.':'Invitation refusée.','ok');
+  renderRM_invitations();
 }
 </script>
 </body>
